@@ -109,7 +109,7 @@ input[type=text] { font-family: var(--body); font-size: 18px; padding: 7px 10px;
 .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.3); cursor: pointer; }
 .swatch.sel { outline: 3px solid var(--blood); outline-offset: 2px; }
 .two-col { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; }
-@media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } .panel { padding: 18px 16px; } .panel h1 { font-size: 32px; } }
+@media (max-width: 760px) { .two-col { grid-template-columns: minmax(0, 1fr); } .two-col > * { min-width: 0; } .panel { padding: 18px 16px; } .panel h1 { font-size: 32px; } }
 
 /* ---------- HUD ---------- */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; font-family: var(--body); }
@@ -1397,6 +1397,63 @@ body.phone #hand .ocard-slot { padding-top: 8px; gap: 3px; }
   #hand, #hand .ocard, #hand-plate { transition: none; }
   #hand .ocard.deal, #hand .ocard.shake, #hand .hand-strength.pulse { animation: none; }
   .ocard-ghost { display: none; }
+}
+
+/* ---------- tables on a narrow screen (3.5.3, owner's request) ----------
+   A table wider than the room it has (app.js fitTables) is laid out a row at a time: its name first,
+   then each value with its column's name in small capitals before it, then its buttons, at the right.
+   No sideways scrolling. A table that fits stays a table. */
+table.stacked, table.stacked > tbody { display: block; width: 100%; }
+table.stacked tr.t-head { display: none !important; }
+table.stacked tr { display: flex; flex-wrap: wrap; align-items: center; column-gap: 14px; row-gap: 5px; padding: 8px 2px 9px; border-bottom: 1px dotted rgba(90,60,25,0.32); }
+table.stacked tr:last-child { border-bottom: none; }
+table.stacked td, table.stacked th { display: block; padding: 0 !important; border: none !important; text-align: left !important; white-space: normal !important; }
+table.stacked td.t-name { flex: 1 1 100%; font-size: 1.04em; line-height: 1.25; }
+table.stacked td.t-pick { flex: 0 0 auto; order: -1; }
+table.stacked td.t-pick + td.t-name { flex-basis: calc(100% - 40px); }
+table.stacked td[data-l]::before { content: attr(data-l); margin-right: 6px; font-family: var(--display); font-size: 0.74em; letter-spacing: .04em; color: var(--ink-soft); white-space: nowrap; }
+table.stacked td.t-act { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+table.stacked td.t-act .btn { margin: 0; }
+table.stacked td.t-empty { display: none; }
+table.stacked select { max-width: 100%; }
+/* The market: two lines a good. The name, and what it costs to buy and to sell; then the stock and
+   what you hold, with the buttons; then, when you remember better prices elsewhere, those. */
+table.trade.stacked tr { column-gap: 12px; row-gap: 6px; }
+table.trade.stacked tr::before { content: ''; order: 4; flex: 0 0 100%; height: 0; }
+table.trade.stacked td.c-name { order: 1; flex: 1 1 auto; min-width: 0; }
+table.trade.stacked td.c-buy { order: 2; min-width: 58px; }
+table.trade.stacked td.c-sell { order: 3; min-width: 62px; }
+table.trade.stacked td.c-buy, table.trade.stacked td.c-sell { font-size: 1.1em; text-align: right !important; white-space: nowrap !important; }
+table.trade.stacked td.c-stock { order: 5; white-space: nowrap !important; }
+table.trade.stacked td.c-held { order: 6; white-space: nowrap !important; }
+table.trade.stacked td.c-act { order: 7; margin-left: auto; flex-wrap: nowrap; }
+table.trade.stacked td.c-act .btn.small { padding: 4px 9px; min-width: 38px; }
+table.trade.stacked td.c-known { order: 8; flex: 1 1 100%; }
+table.trade.stacked td.c-known:has(.nothing), table.trade.stacked tr.banned-row td.c-known, table.trade.stacked tr.banned-row td.c-act { display: none; }
+table.trade.stacked td.c-ban { order: 2; text-align: right !important; font-size: 0.9em; }
+table.trade.stacked td.c-stock, table.trade.stacked td.c-held, table.trade.stacked td.c-known { font-size: 0.95em; }
+/* Room on an upright phone: less margin round the page, and the menu bar's buttons share the width
+   (icons alone; the page you are on is lit) instead of running off the edge. */
+/* The skills (the captain, and a new captain's points): on the narrowest phones the description goes
+   under the name and the number instead of beside them. */
+@media (max-width: 400px) {
+  .skill-row { grid-template-columns: minmax(0, 1fr) auto auto auto !important; row-gap: 2px; }
+  .skill-row > small, .skill-row > div { grid-column: 1 / -1; }
+  /* The powers and the other ruled lists: the standing and the bounty go under the name. */
+  .faction-row:has(> .dot) { grid-template-columns: 14px minmax(0, 1fr) !important; row-gap: 2px; }
+  .faction-row:has(> .dot) > :nth-child(n+3) { grid-column: 2; font-size: 0.93em; }
+  .faction-row:not(:has(> .dot)) { display: flex !important; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 3px; }
+  .faction-row:not(:has(> .dot)) > :first-child { flex: 1 1 58%; min-width: 0; }
+  .faction-row:not(:has(> .dot)) > :not(:first-child) { flex: 0 0 auto; }
+}
+@media (max-width: 520px) {
+  .backdrop { padding: 8px; }
+  .panel { padding: 16px 13px; outline-offset: -7px; }
+  .gnav { overflow-x: hidden; gap: 1px; padding: 4px 3px; justify-content: space-between; }
+  .gnav-b { flex: 1 1 0; min-width: 0; justify-content: center; padding: 7px 0; }
+  .gnav .gl, .gnav-b.on .gl, .gnav-b[data-nav="back"] .gl { display: none; }
+  .gnav .gi { font-size: 17px; }
+  .gnav-b[data-nav="back"] { margin-right: 3px; flex-grow: 1.3; }
 }
 
 </style>
@@ -43569,7 +43626,7 @@ const HASTEN = 4;               // time runs this many times faster while hasten
 const NEAR_RANGE = 3600;                  // beyond this, NPCs use cheap abstract movement
 const POPULATION = { merchant: 16, patrol: 8, pirate: 7 }; // pirates: set by the difficulty preset
 const SAVE_VERSION = 9;
-const GAME_VERSION = '3.5.2'; // shown on the main menu
+const GAME_VERSION = '3.5.3'; // shown on the main menu
 
 function cargoValue(cargo) { return Object.entries(cargo || {}).reduce((a, [g, q]) => a + (GOODS[g]?.base || 0) * q, 0); }
 
@@ -51991,7 +52048,9 @@ const hash = (x, y, s = 0) => { let h = (x * 374761393 + y * 668265263 + s * 214
 const OVERLAYS = [];
 function addShoreOverlay(fn) { OVERLAYS.push(fn); }
 
-function cellSize(m, maxPx) { return Math.max(10, Math.floor(maxPx / m.N)); }
+// (3.5.3: on a phone on its side the squares may go down to 6 px, so that the largest island, 36
+// squares across, still fits the screen with its clue and buttons.)
+function cellSize(m, maxPx, least = 10) { return Math.max(least, Math.floor(maxPx / m.N)); }
 
 function drawShore(cv, game, { hover = null, path = null, cs = 20, dpr = 1, selected = null } = {}) {
   const st = game.state, sh = shoreOf(st);
@@ -56136,6 +56195,48 @@ function navGo(id) {
     sheet: () => sheetScreen(), map: () => mapScreen(), glass: () => glassScreen(), help: () => help(() => resume()), settings: () => settingsScreen(() => resume()), pause: () => pauseMenu(),
   }[id] || (() => {}))();
 }
+// Tables on a narrow screen (3.5.3, the owner, on the market on his iPhone: "without needing to scroll
+// left and right to see all information"). Any table in a screen that is wider than the room it has is
+// laid out a row at a time instead: each row a little block, its name first, then each value with its
+// column's name in small capitals, then its buttons. Done after every render, and again when the screen
+// turns; a table that fits is left a table. Tables marked .keep-table are never restacked.
+const fitted = new WeakSet();
+const bareText = (td) => { const c = td.cloneNode(true); for (const x of c.querySelectorAll('button, select, input')) x.remove(); return c.textContent.replace(/[\s·]/g, ''); };
+function labelTable(t) {
+  const rows = [...t.rows];
+  const head = rows.find((r) => r.cells.length && [...r.cells].every((c) => c.tagName === 'TH'));
+  const labels = [];
+  if (head) { head.classList.add('t-head'); for (const th of head.cells) for (let k = 0; k < (th.colSpan || 1); k++) labels.push((th.dataset.l ?? th.textContent).trim()); }
+  for (const r of rows) {
+    if (r === head) continue;
+    let i = 0, named = false;
+    for (const td of r.cells) {
+      const controls = !!td.querySelector('button, select, input') && !bareText(td);
+      if (controls && !labels[i]) td.classList.add(named ? 't-act' : 't-pick');
+      else if (!named) { td.classList.add('t-name'); named = true; }
+      else if (labels[i] && td.dataset.l == null) td.dataset.l = labels[i];
+      if (!td.textContent.trim() && !td.querySelector('button, select, input, i, svg, img')) td.classList.add('t-empty');
+      i += td.colSpan || 1;
+    }
+  }
+}
+function fitTables(root, all = false) {
+  if (!root) return;
+  for (const t of root.querySelectorAll('table')) {
+    if (t.classList.contains('keep-table') || (!all && fitted.has(t))) continue;
+    if (!fitted.has(t)) labelTable(t);
+    fitted.add(t);
+    t.classList.remove('stacked');
+    const box = t.parentElement;
+    if (box && t.offsetWidth > box.clientWidth + 1) t.classList.add('stacked');
+  }
+}
+{
+  // Whatever else draws into a screen; and a phone turned on its side.
+  let fitT = 0;
+  new MutationObserver(() => fitTables(overlay)).observe(overlay, { childList: true, subtree: true });
+  addEventListener('resize', () => { clearTimeout(fitT); fitT = setTimeout(() => fitTables(overlay, true), 120); });
+}
 function show(html, cls = '') {
   const view = `${screen}|${cls}|${portTab}|${baseTab}`;
   const same = html && view === lastView;
@@ -56143,6 +56244,7 @@ function show(html, cls = '') {
   const nav = html && game && NAV_SCREENS.has(screen) && navAvailable('ship');
   overlay.innerHTML = html ? `${nav ? navHtml() : ''}<div class="backdrop ${cls}${nav ? ' with-nav' : ''}">${html}</div>` : '';
   if (nav) overlay.querySelector('.gnav').addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (b) navGo(b.dataset.nav); });
+  if (html) fitTables(overlay);
   lastView = html ? view : null;
   if (keep) restoreScroll(overlay, keep);
   const pa = html ? pressAnchor : null;
@@ -57241,12 +57343,12 @@ function portScreen() {
       const rel = q.buy / GOODS[g].base;
       const cls = rel < 0.8 ? 'cheap' : rel > 1.35 ? 'dear' : '';
       const wanted = contracts.activeContracts(st).some((c) => c.good === g && c.status === 'active');
-      if (!q.legal) return `<tr><td>${GOODS[g].name}${wanted ? ' <small class="tag">contract</small>' : ''}</td><td colspan="3" class="banned">Forbidden here${port.blackMarketAvailable(game) ? ' — try the tavern' : ''}</td><td class="num">${held}</td><td></td><td></td></tr>`;
+      if (!q.legal) return `<tr class="banned-row"><td class="c-name">${GOODS[g].name}${wanted ? ' <small class="tag">contract</small>' : ''}</td><td colspan="3" class="banned c-ban">Forbidden here${port.blackMarketAvailable(game) ? ' — try the tavern' : ''}</td><td class="num c-held">${held}</td><td class="c-known"></td><td class="c-act"></td></tr>`;
       const fxg = moneyMod.effectFor(mfx, g, isl);
-      return `<tr><td>${GOODS[g].name}${GOODS[g].contraband ? ' <small class="muted">(contraband)</small>' : ''}${wanted ? ' <small class="tag">contract</small>' : ''}${fxg.map((m) => ` <small class="tag mkt ${m.mult > 1 ? 'up' : 'down'}" title="${esc(m.text)}">${esc(m.word)} ${m.days}d</small>`).join('')}</td>
-        <td class="num">${q.stock}</td><td class="num ${cls}">${q.buy}</td><td class="num ${cls}">${q.sell}</td><td class="num">${held}${(() => { const h = hotcargo.hotTotal(st, g); if (!h) return ''; const t = hotcargo.saleTerms(game, isl, g, h); return ` <small class="tag hot" title="${esc(`Taken from the ${hotcargo.hotOf(st, g).map((x) => FACTIONS[x.f].short).filter((v, i, a) => a.indexOf(v) === i).join(' and ')}${hotcargo.hotOf(st, g).some((x) => x.papered) ? ', with papers' : ''}. ${t.haven ? 'Nobody here asks.' : t.risk ? `About ${Math.round(t.risk * 100)}% that a merchant here knows the marks; ` : 'Nobody here will know the marks; '}${t.haven ? '' : `they pay ${Math.round(t.mult * 100)}% for it.`}`)}">hot ${h}</small>`; })()}</td>
-        <td class="known">${(() => { const k = economy.bestRemembered(st, g, isl.id); const age = (d) => (st.day - d <= 0 ? 'today' : `${st.day - d}d ago`); const parts = []; if (k.sell && k.sell.price > q.buy) parts.push(`<span class="cheap" title="Seen ${age(k.sell.day)}">sells ${k.sell.price} at ${esc(game.world.islands[k.sell.islandId].settlement.name)}</span>`); if (k.buy && k.buy.price < q.sell) parts.push(`<span class="dear" title="Seen ${age(k.buy.day)}">buy ${k.buy.price} at ${esc(game.world.islands[k.buy.islandId].settlement.name)}</span>`); return parts.length ? `<small>${parts.join(' · ')}</small>` : '<small class="muted">—</small>'; })()}</td>
-        <td class="num" style="white-space:nowrap">
+      return `<tr><td class="c-name">${GOODS[g].name}${GOODS[g].contraband ? ' <small class="muted">(contraband)</small>' : ''}${wanted ? ' <small class="tag">contract</small>' : ''}${fxg.map((m) => ` <small class="tag mkt ${m.mult > 1 ? 'up' : 'down'}" title="${esc(m.text)}">${esc(m.word)} ${m.days}d</small>`).join('')}</td>
+        <td class="num c-stock">${q.stock}</td><td class="num c-buy ${cls}">${q.buy}</td><td class="num c-sell ${cls}">${q.sell}</td><td class="num c-held">${held}${(() => { const h = hotcargo.hotTotal(st, g); if (!h) return ''; const t = hotcargo.saleTerms(game, isl, g, h); return ` <small class="tag hot" title="${esc(`Taken from the ${hotcargo.hotOf(st, g).map((x) => FACTIONS[x.f].short).filter((v, i, a) => a.indexOf(v) === i).join(' and ')}${hotcargo.hotOf(st, g).some((x) => x.papered) ? ', with papers' : ''}. ${t.haven ? 'Nobody here asks.' : t.risk ? `About ${Math.round(t.risk * 100)}% that a merchant here knows the marks; ` : 'Nobody here will know the marks; '}${t.haven ? '' : `they pay ${Math.round(t.mult * 100)}% for it.`}`)}">hot ${h}</small>`; })()}</td>
+        <td class="known c-known" data-l="Elsewhere">${(() => { const k = economy.bestRemembered(st, g, isl.id); const age = (d) => (st.day - d <= 0 ? 'today' : `${st.day - d}d ago`); const parts = []; if (k.sell && k.sell.price > q.buy) parts.push(`<span class="cheap" title="Seen ${age(k.sell.day)}">sells ${k.sell.price} at ${esc(game.world.islands[k.sell.islandId].settlement.name)}</span>`); if (k.buy && k.buy.price < q.sell) parts.push(`<span class="dear" title="Seen ${age(k.buy.day)}">buy ${k.buy.price} at ${esc(game.world.islands[k.buy.islandId].settlement.name)}</span>`); return parts.length ? `<small>${parts.join(' · ')}</small>` : '<small class="muted nothing">—</small>'; })()}</td>
+        <td class="num c-act" style="white-space:nowrap">
           <button class="btn small" data-buy="${g}" data-n="1">+1</button><button class="btn small" data-buy="${g}" data-n="10">+10</button>
           <button class="btn small ghost" data-sell="${g}" data-n="1" ${held ? '' : 'disabled'}>−1</button><button class="btn small ghost" data-sell="${g}" data-n="${held}" ${held ? '' : 'disabled'}${held >= moneyMod.FLOOD_AT ? ` title="${moneyMod.FLOOD_AT} or more sold at once floods this market: a quarter off here for ten days"` : ''}>All${held >= moneyMod.FLOOD_AT ? ' ⚠' : ''}</button>
         </td></tr>`;
@@ -57257,7 +57359,7 @@ function portScreen() {
       + (emb ? `<div class="notice bad">Embargoed by the ${FACTIONS[emb.by].short} (${emb.until - st.day} more days). Imports are scarce and dear here, but the ${FACTIONS[emb.by].short} will hold it against you if you sell.</div>` : '');
     const fxNote = mfx.length ? `<div class="notice"><b>What is moving prices here:</b> ${mfx.map((m) => esc(m.text)).join(' ')}</div>` : '';
     body = `${econNote}${fxNote}<p>Fleet hold: <b>${cargoUsed(p)} / ${cargoCapacity(st)}</b> · Your crews eat <b>${need}</b> provisions a day (you carry ${p.cargo.provisions || 0}). <span class="cheap">Green</span> is cheap here, <span class="dear">red</span> is dear.</p>
-      <div class="table-wrap"><table class="market"><tr><th>Good</th><th class="num">Stock</th><th class="num">Buy</th><th class="num">Sell</th><th class="num">Held</th><th title="The best prices you remember from other towns, and how old they are (hover)">Elsewhere, as you remember it</th><th></th></tr>${rows}</table></div>
+      <div class="table-wrap"><table class="market trade"><tr><th>Good</th><th class="num">Stock</th><th class="num">Buy</th><th class="num">Sell</th><th class="num">Held</th><th title="The best prices you remember from other towns, and how old they are (hover)">Elsewhere, as you remember it</th><th></th></tr>${rows}</table></div>
       <h3>The chandler <small class="muted">for the ${esc(p.name)}</small></h3><p class="muted" style="margin-top:0">${esc(storesSummary())}</p>
       <div class="gear-row">${Object.entries(storesMod.CHANDLERY).map(([id, G]) => { const have = storesMod.hasGear(p, id); return `<div class="gear${have ? ' have' : ''}"><b>${esc(G.name)}</b><small>${esc(G.desc)}</small>${have ? '<small class="cheap">Aboard.</small>' : `<button class="btn small" data-gear="${id}">${fmt(storesMod.gearCost(p, id))} gold</button>`}</div>`; }).join('')}</div>
       <h4 style="margin:10px 0 4px">The ship's other company <small class="muted">(rats in the hold: ${esc(animalsMod.ratWords(animalsMod.zoo(st).rats))})</small></h4>
@@ -60892,7 +60994,7 @@ function shoreCell() {
   const side = matchMedia('(orientation: landscape) and (max-height: 520px)').matches; // the clue and bar sit beside the map
   const extra = side ? 0 : (document.getElementById('sh-clue')?.offsetHeight || 0) + (document.getElementById('sh-bar')?.offsetHeight || 0);
   const w = Math.min(side ? 9999 : wrap?.clientWidth || 600, 720, window.innerHeight - (side ? 96 : 120) - extra);
-  return cellSize(m, Math.max(220, w));
+  return cellSize(m, Math.max(220, w), side ? 6 : 10);
 }
 function drawShoreNow() {
   const st = game?.state; if (!st?.shore || screen !== 'shore') return;

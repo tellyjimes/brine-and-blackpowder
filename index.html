@@ -80,7 +80,15 @@ button { font-family: var(--display); cursor: pointer; }
   background: linear-gradient(#5b3d1f, #3f2a14); color: #f5e6c4; border: 1px solid #2b1a0a;
   border-radius: 4px; padding: 9px 18px; font-size: 17px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 0 rgba(0,0,0,0.3);
 }
-.btn:hover:not(:disabled) { background: linear-gradient(#70502a, #4d341a); }
+.btn:active:not(:disabled) { background: linear-gradient(#70502a, #4d341a); }
+/* 3.5.4: a hover look only where there is a pointer that hovers. On a phone a tapped button kept its
+   hover colour until the next tap anywhere, which looked like a button stuck half pressed. On a touch
+   screen a button darkens only while the finger is on it. */
+@media (hover: hover) { .btn:hover:not(:disabled) { background: linear-gradient(#70502a, #4d341a); } .btn.gold:active:not(:disabled) { background: linear-gradient(#f0c96a, #c99a3a); } .btn.ghost:hover:not(:disabled) { background: rgba(60,40,15,0.1); } }
+.btn.ghost:active:not(:disabled) { background: rgba(60,40,15,0.18); }
+/* A ghost button that is switched on (the chart's dividers) shows it. */
+.btn.ghost.on, .btn.ghost.on:hover { background: linear-gradient(var(--brass-light), var(--brass)); border-color: #7a5a1a; }
+.chart-hint.on { background: rgba(201,154,58,0.92) !important; color: var(--ink) !important; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn.small { padding: 4px 10px; font-size: 14px; }
 .btn.gold { background: linear-gradient(var(--brass-light), var(--brass)); color: var(--ink); border-color: #7a5a1a; }
@@ -43626,7 +43634,7 @@ const HASTEN = 4;               // time runs this many times faster while hasten
 const NEAR_RANGE = 3600;                  // beyond this, NPCs use cheap abstract movement
 const POPULATION = { merchant: 16, patrol: 8, pirate: 7 }; // pirates: set by the difficulty preset
 const SAVE_VERSION = 9;
-const GAME_VERSION = '3.5.3'; // shown on the main menu
+const GAME_VERSION = '3.5.4'; // shown on the main menu
 
 function cargoValue(cargo) { return Object.entries(cargo || {}).reduce((a, [g, q]) => a + (GOODS[g]?.base || 0) * q, 0); }
 
@@ -56969,7 +56977,11 @@ function mapScreen() {
   on('#map-out', 'click', () => chartZoom(1 / 1.4));
   on('#map-fit', 'click', chartFit);
   on('#map-ship', 'click', chartOnShip);
-  on('#map-div', 'click', (e) => { chartDiv = { on: !chartDiv.on, a: null, b: null, fixed: false }; e.currentTarget.classList.toggle('on', chartDiv.on); toast(chartDiv.on ? 'Dividers: click where to measure from, then where to.' : 'Dividers put away.', 'info'); redrawChart(); });
+  // (3.5.4: the message goes on the chart itself too: the log is behind the chart on a phone.)
+  const hint0 = overlay.querySelector('.chart-hint')?.textContent || '';
+  const divHint = () => { const h = overlay.querySelector('.chart-hint'); if (h) { h.textContent = chartDiv.on ? `Dividers out: ${isTouch ? 'tap' : 'click'} where to measure from, then where to.` : hint0; h.classList.toggle('on', chartDiv.on); } };
+  divHint();
+  on('#map-div', 'click', (e) => { chartDiv = { on: !chartDiv.on, a: null, b: null, fixed: false }; e.currentTarget.classList.toggle('on', chartDiv.on); toast(chartDiv.on ? 'Dividers: click where to measure from, then where to.' : 'Dividers put away.', 'info'); divHint(); redrawChart(); });
   on('#map-clear', 'click', () => { nav.clearWaypoint(game.state); mapScreen(); });
   // WORLD-1: a piece of news takes you to the town it is about.
   on('[data-cnews]', 'click', (e) => { const N = (game.state.politics?.news || []).slice(-8).reverse()[+e.currentTarget.dataset.cnews]; if (!N) return; const t = game.world.islands.find((i) => i.settlement && N.text.includes(i.settlement.name) && (game.state.discovered.islands.includes(i.id) || game.state.rumoured.islands.includes(i.id))); if (t) { chartview.centreOn(chartView, game.world, t.settlement.dock.x, t.settlement.dock.y, Math.max(chartView.zoom, 2.5)); redrawChart(); } else toast('That place is not on your chart.', 'info'); });
@@ -62068,6 +62080,49 @@ document.body.classList.toggle('touch', isTouch);
 const typing = (t) => !!(t && (t.nodeType === 3 ? t.parentElement : t)?.closest?.('input, textarea, select, [contenteditable="true"], .selectable'));
 document.addEventListener('selectstart', (e) => { if (!typing(e.target)) e.preventDefault(); });
 document.addEventListener('contextmenu', (e) => { if (isTouch && !typing(e.target)) e.preventDefault(); });
+// 3.5.4 (the owner, with a recording from his iPhone: buttons on the chart turn their pressed colour and
+// do nothing). Safari on an iPhone sometimes takes a tap on a button for a hover: it paints the button
+// as touched and sends no click, when it judges that something on the page changed under the finger
+// (a game redraws all the time). So on a touch screen, a clean tap (a finger down and up on the same
+// button, moving less than 12 px, within 0.8 s) that the browser has not turned into a click within
+// 0.35 s is pressed by the game itself. When the browser's click does come, nothing more is done; and a
+// late click after the game has pressed the button is swallowed, so a tap is never taken twice.
+const TAPPABLE = 'button, .btn, [role="button"], summary, a[href]';
+const tapFix = { down: null, pending: null, timer: 0, done: null, at: null };
+const tapEl = (t) => { const el = t?.closest?.(TAPPABLE); return el && !el.matches('input, select, textarea, label') ? el : null; };
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch' || !e.isPrimary) { tapFix.down = null; return; }
+  const el = tapEl(e.target);
+  // A new touch: a press still waiting is given up if the finger is trying the same button again (this
+  // tap will do it), and made at once if it is going on to something else.
+  clearTimeout(tapFix.timer); tapFix.done = null;
+  const p = tapFix.pending; tapFix.pending = null;
+  if (p && p !== el && p.isConnected && !p.disabled) p.click();
+  tapFix.down = el ? { el, x: e.clientX, y: e.clientY, t: performance.now() } : null;
+}, true);
+document.addEventListener('pointermove', (e) => { const d = tapFix.down; if (d && e.pointerType === 'touch' && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12) tapFix.down = null; }, true);
+document.addEventListener('pointercancel', () => { tapFix.down = null; }, true);
+document.addEventListener('pointerup', (e) => {
+  const d = tapFix.down; tapFix.down = null;
+  if (!d || e.pointerType !== 'touch' || performance.now() - d.t > 800) return;
+  const el = tapEl(document.elementFromPoint(e.clientX, e.clientY)) || tapEl(e.target);
+  if (el !== d.el) return;
+  tapFix.pending = el; tapFix.at = { x: e.clientX, y: e.clientY };
+  clearTimeout(tapFix.timer);
+  tapFix.timer = setTimeout(() => {
+    const p = tapFix.pending; tapFix.pending = null;
+    if (!p || !p.isConnected || p.disabled) return;
+    tapFix.done = { el: p, ...tapFix.at, until: performance.now() + 1000 };
+    p.click();
+  }, 350);
+}, true);
+document.addEventListener('click', (e) => {
+  // The browser's own click: the press waiting for it is not needed.
+  if (e.isTrusted && tapFix.pending) { clearTimeout(tapFix.timer); tapFix.pending = null; }
+  // A click arriving after the game has already pressed that button for the same tap.
+  const D = tapFix.done;
+  if (e.isTrusted && D && performance.now() < D.until && (tapEl(e.target) === D.el || Math.hypot(e.clientX - D.x, e.clientY - D.y) < 30)) { tapFix.done = null; e.preventDefault(); e.stopImmediatePropagation(); }
+}, true);
 // 3.4.2: a phone often closes a game left in the background without a word, so the voyage is saved
 // whenever the game is hidden (the home screen, another app, the phone locked) or the page is closed.
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { try { autosave(); } catch {} } });

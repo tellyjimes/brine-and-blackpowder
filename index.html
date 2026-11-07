@@ -45,6 +45,13 @@
 * { box-sizing: border-box; }
 :root { color-scheme: light; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--sea-night); color: var(--ink); font-family: var(--body); }
+/* 3.4.1 (the owner, on the iPhone: copy and paste "on the buttons ... a big distracting blue field over the
+   game"). A game, not a page of text: a long press or a double tap selects nothing and opens no callout
+   (Copy, Look Up, Share), a tap does not flash, and a double tap does not zoom. What you type or copy (a
+   save, a name, the settings) still can be selected. */
+html { touch-action: manipulation; }
+html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+input, textarea, select, [contenteditable="true"], .selectable { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 canvas#sea { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
 .hidden { display: none !important; }
 button { font-family: var(--display); cursor: pointer; }
@@ -42540,7 +42547,7 @@ const HASTEN = 4;               // time runs this many times faster while hasten
 const NEAR_RANGE = 3600;                  // beyond this, NPCs use cheap abstract movement
 const POPULATION = { merchant: 16, patrol: 8, pirate: 7 }; // pirates: set by the difficulty preset
 const SAVE_VERSION = 9;
-const GAME_VERSION = '3.4.0'; // shown on the main menu
+const GAME_VERSION = '3.4.1'; // shown on the main menu
 
 function cargoValue(cargo) { return Object.entries(cargo || {}).reduce((a, [g, q]) => a + (GOODS[g]?.base || 0) * q, 0); }
 
@@ -60463,6 +60470,11 @@ function drawTitleSea(dt) {
 
 // ---------- boot ----------
 document.body.classList.toggle('touch', isTouch);
+// 3.4.1: a long press never starts a selection or a callout menu, except in a text box (the CSS does
+// the same; this catches what a browser lets through). The context menu is kept on a desktop.
+const typing = (t) => !!(t && (t.nodeType === 3 ? t.parentElement : t)?.closest?.('input, textarea, select, [contenteditable="true"], .selectable'));
+document.addEventListener('selectstart', (e) => { if (!typing(e.target)) e.preventDefault(); });
+document.addEventListener('contextmenu', (e) => { if (isTouch && !typing(e.target)) e.preventDefault(); });
 applyAudioSettings();
 applyUiScale();
 buildHud();

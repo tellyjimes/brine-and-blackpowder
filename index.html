@@ -42547,7 +42547,7 @@ const HASTEN = 4;               // time runs this many times faster while hasten
 const NEAR_RANGE = 3600;                  // beyond this, NPCs use cheap abstract movement
 const POPULATION = { merchant: 16, patrol: 8, pirate: 7 }; // pirates: set by the difficulty preset
 const SAVE_VERSION = 9;
-const GAME_VERSION = '3.4.1'; // shown on the main menu
+const GAME_VERSION = '3.4.2'; // shown on the main menu
 
 function cargoValue(cargo) { return Object.entries(cargo || {}).reduce((a, [g, q]) => a + (GOODS[g]?.base || 0) * q, 0); }
 
@@ -60475,6 +60475,10 @@ document.body.classList.toggle('touch', isTouch);
 const typing = (t) => !!(t && (t.nodeType === 3 ? t.parentElement : t)?.closest?.('input, textarea, select, [contenteditable="true"], .selectable'));
 document.addEventListener('selectstart', (e) => { if (!typing(e.target)) e.preventDefault(); });
 document.addEventListener('contextmenu', (e) => { if (isTouch && !typing(e.target)) e.preventDefault(); });
+// 3.4.2: a phone often closes a game left in the background without a word, so the voyage is saved
+// whenever the game is hidden (the home screen, another app, the phone locked) or the page is closed.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { try { autosave(); } catch {} } });
+addEventListener('pagehide', () => { try { autosave(); } catch {} });
 applyAudioSettings();
 applyUiScale();
 buildHud();
@@ -60583,7 +60587,43 @@ return {  };
 </script>
 <script>
 // The iPhone app: keep the game for offline play, and ask that its saves are never cleared for space.
-if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+// 3.4.2: a new version is looked for at each opening and each return to the app; once it has arrived,
+// the game reloads into it on the main menu, or offers a Restart (saving first) in the middle of a voyage.
+(function () {
+  if (!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
+  var sw = navigator.serviceWorker, had = !!sw.controller, reloading = false, last = 0, waitMenu = null;
+  var atMenu = function () { var m = document.getElementById('m-new'); return !!(m && m.offsetParent); };
+  var restart = function () { if (reloading) return; reloading = true; try { window.__brine && window.__brine.save && window.__brine.save(); } catch (e) {} location.reload(); };
+  var note = function (html, button) {
+    var d = document.getElementById('update-note');
+    if (!html) { if (d) d.remove(); return; }
+    if (!d) { d = document.createElement('div'); d.id = 'update-note'; d.setAttribute('role', 'status'); document.body.appendChild(d); }
+    d.style.cssText = 'position:fixed;left:50%;top:8px;transform:translateX(-50%);z-index:9999;max-width:min(92vw,420px);box-sizing:border-box;background:#efe0b9;color:#2b1d0e;border:1px solid #8b6b3a;border-left:4px solid #2f6b3a;border-radius:4px;padding:6px 10px;font:14px/1.35 Georgia,serif;box-shadow:0 4px 14px rgba(0,0,0,.45);display:flex;gap:10px;align-items:center';
+    d.innerHTML = '<span style="white-space:nowrap">' + html + '</span>' + (button ? '<button data-u="go" style="white-space:nowrap;font:14px Georgia,serif;padding:4px 10px;border:1px solid #5a3d1c;background:#5a3d1c;color:#efe0b9;border-radius:3px">' + button + '</button><button data-u="x" aria-label="Later" style="border:0;background:none;font:18px/1 Georgia,serif;color:#2b1d0e;padding:2px 4px">\u2715</button>' : '');
+    var go = d.querySelector('[data-u="go"]'), x = d.querySelector('[data-u="x"]');
+    if (go) go.addEventListener('click', restart);
+    if (x) x.addEventListener('click', function () { note(null); });
+  };
+  addEventListener('load', function () {
+    sw.register('sw.js').then(function (reg) {
+      var check = function () { var now = Date.now(); if (now - last < 60000) return; last = now; reg.update().catch(function () {}); };
+      check();
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') check(); });
+      reg.addEventListener('updatefound', function () {
+        var w = reg.installing; if (!had || !w) return;
+        note('Downloading a new version of the game\u2026');
+        w.addEventListener('statechange', function () { if (w.state === 'redundant') note(null); });
+      });
+    }).catch(function () {});
+  });
+  sw.addEventListener('controllerchange', function () {
+    if (!had) { had = true; return; }
+    if (atMenu()) return restart();
+    note('New version ready.', 'Save &amp; restart');
+    // Or it comes in by itself the next time the main menu is shown.
+    if (!waitMenu) waitMenu = setInterval(function () { if (atMenu()) { clearInterval(waitMenu); restart(); } }, 1500);
+  });
+})();
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
 // In Safari on an iPhone or iPad (not yet opened from the home screen), say once how to keep it as an app.
 (function () {

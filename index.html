@@ -773,6 +773,10 @@ body.touch .hud-nav { display: none; }
 
 /* Zooming the cutaway (2.1.5). */
 .cw-pic { position: relative; }
+/* 3.5.1: while a pinch or a drag moves the picture, it is clipped to its own frame, and nothing in it animates. */
+.cw-pic.cw-clip { overflow: hidden; }
+.cutaway.gesturing * { animation-play-state: paused !important; transition: none !important; }
+.cutaway.gesturing { pointer-events: auto; }
 .cw-zoom { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; align-items: center; gap: 4px; background: rgba(241,226,189,.92); border: 1px solid #2a1b0e; border-radius: 4px; padding: 3px 5px; box-shadow: 0 1px 4px rgba(40,24,8,.3); }
 .cw-zoom .btn.small { min-width: 28px; padding: 2px 8px; }
 .cw-zoom .btn:disabled { opacity: .4; cursor: default; }
@@ -43460,7 +43464,7 @@ const HASTEN = 4;               // time runs this many times faster while hasten
 const NEAR_RANGE = 3600;                  // beyond this, NPCs use cheap abstract movement
 const POPULATION = { merchant: 16, patrol: 8, pirate: 7 }; // pirates: set by the difficulty preset
 const SAVE_VERSION = 9;
-const GAME_VERSION = '3.5.0'; // shown on the main menu
+const GAME_VERSION = '3.5.1'; // shown on the main menu
 
 function cargoValue(cargo) { return Object.entries(cargo || {}).reduce((a, [g, q]) => a + (GOODS[g]?.base || 0) * q, 0); }
 
@@ -49016,9 +49020,28 @@ function looks(id) {
 }
 
 // ---------- the plate: paper, hatching, wood, sea and light ----------
+// The paper's grain (3.5.1, the owner: zoom in Life aboard was "slow and unusable" on a phone). It was an
+// SVG noise filter (feTurbulence) over the whole picture, which a phone had to compute again at every step
+// of a pinch. Now the same speckle is drawn once into a small tile and repeated: the same look, nearly free.
+let PAPER = null;
+function paperUrl() {
+  if (PAPER !== null) return PAPER;
+  PAPER = '';
+  try {
+    if (typeof document === 'undefined') return PAPER;
+    const n = 96, c = document.createElement('canvas'); c.width = c.height = n;
+    const x = c.getContext('2d'); if (!x) return PAPER;
+    const img = x.createImageData(n, n);
+    let s = 7; const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+    for (let i = 0; i < img.data.length; i += 4) { const v = rnd(); img.data[i] = 140; img.data[i + 1] = 107; img.data[i + 2] = 61; img.data[i + 3] = Math.round(v * v * 62); }
+    x.putImageData(img, 0, 0);
+    PAPER = c.toDataURL('image/png');
+  } catch { PAPER = ''; }
+  return PAPER;
+}
 function defs() {
   return `<defs>
-    <filter id="cw-paper" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 .55  0 0 0 0 .42  0 0 0 0 .24  0 0 0 .22 0"/><feComposite in2="SourceGraphic" operator="in"/><feBlend in="SourceGraphic" mode="multiply"/></filter>
+    <pattern id="cw-paper" patternUnits="userSpaceOnUse" width="48" height="48">${paperUrl() ? `<image href="${paperUrl()}" width="48" height="48" preserveAspectRatio="none"/>` : ''}</pattern>
     <radialGradient id="cw-vignette" cx="50%" cy="45%" r="75%"><stop offset="60%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#3a2410" stop-opacity=".35"/></radialGradient>
     <linearGradient id="cw-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6d3a6"/><stop offset=".7" stop-color="#efe2c0"/><stop offset="1" stop-color="#f3e8cc"/></linearGradient>
     <linearGradient id="cw-sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5e8a80"/><stop offset=".35" stop-color="#3f6d68"/><stop offset="1" stop-color="#1f3f44"/></linearGradient>
@@ -49095,7 +49118,7 @@ function waves(x0, x1, y, n = 3, gap = 9) {
   return `<path d="${d}" fill="none" stroke="${INK}" stroke-width=".7" opacity=".45"/>`;
 }
 
-return { INK, FIGURES, STATION_FIGURE, setLivery, looks, defs, person, group, cannon, cask, bale, lantern, hammock, sleeper, beast, cot, bubble, waves };
+return { INK, FIGURES, STATION_FIGURE, setLivery, looks, paperUrl, defs, person, group, cannon, cask, bale, lantern, hammock, sleeper, beast, cot, bubble, waves };
 })();
 
 // ---- src/ui/cutaway.js ----
@@ -49323,7 +49346,7 @@ function cutawaySvg(ship, opts = {}) {
   let b = art.defs();
   b += `<defs><clipPath id="cw-hull"><path d="${hull}"/></clipPath><clipPath id="cw-in"><path d="${inner}"/></clipPath><clipPath id="cw-below"><rect x="0" y="${waterY}" width="${W}" height="${H - waterY}"/></clipPath><clipPath id="cw-above"><rect x="0" y="0" width="${W}" height="${waterY}"/></clipPath></defs>`;
   // The plate: paper, sky and a far horizon.
-  b += `<rect x="0" y="${top}" width="${W}" height="${H - top}" fill="#ead8ae" filter="url(#cw-paper)"/>`;
+  b += `<rect x="0" y="${top}" width="${W}" height="${H - top}" fill="#ead8ae"/>${art.paperUrl() ? `<rect x="0" y="${top}" width="${W}" height="${H - top}" fill="url(#cw-paper)"/>` : ''}`;
   b += `<rect x="12" y="${top + 12}" width="${W - 24}" height="${waterY - top - 12}" fill="url(#cw-sky)"/>`;
   b += `<path d="M60,${top + 70} q30,-16 60,-4 q22,-14 50,0 q20,-8 34,4 M700,${top + 52} q26,-14 52,-2 q24,-12 48,2" fill="none" stroke="${art.INK}" stroke-width=".7" opacity=".35"/>`;
   b += `<path d="M150,${top + 120} l5,-4 l5,4 M172,${top + 108} l4,-3 l4,3 M820,${top + 140} l5,-4 l5,4" fill="none" stroke="${art.INK}" stroke-width=".9" opacity=".6"/>`;
@@ -59396,23 +59419,73 @@ function cutawayView() {
   const base = (svg.dataset.base ||= svg.getAttribute('viewBox')).split(/\s+/).map(Number);
   return { svg, base };
 }
-function applyCutawayZoom() {
-  const v = cutawayView(); if (!v) return;
+// The view's zoom and centre, kept inside the picture.
+function clampCutawayZoom(v) {
   const [bx, by, bw, bh] = v.base, z = (shipView.zoom ||= { k: 1, cx: bx + bw / 2, cy: by + bh / 2 });
   z.k = Math.max(1, Math.min(CW_ZOOM_MAX, z.k));
   const w = bw / z.k, h = bh / z.k;
   z.cx = Math.max(bx + w / 2, Math.min(bx + bw - w / 2, z.cx)); z.cy = Math.max(by + h / 2, Math.min(by + bh - h / 2, z.cy));
-  v.svg.setAttribute('viewBox', `${(z.cx - w / 2).toFixed(1)} ${(z.cy - h / 2).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
-  v.svg.classList.toggle('zoomed', z.k > 1.01);
+  return z;
+}
+function cutawayZoomLabels(z) {
   const lvl = document.getElementById('cwz-lvl'); if (lvl) lvl.textContent = `×${z.k < 1.95 ? z.k.toFixed(1).replace(/\.0$/, '') : Math.round(z.k)}`;
   const o = document.getElementById('cwz-out'), f = document.getElementById('cwz-fit'), i = document.getElementById('cwz-in');
   if (o) o.disabled = z.k <= 1.01; if (f) f.disabled = z.k <= 1.01; if (i) i.disabled = z.k >= CW_ZOOM_MAX - 0.01;
 }
+function applyCutawayZoom() {
+  const v = cutawayView(); if (!v) return;
+  if (cwLive) return cwLivePaint(); // in the middle of a pinch or a drag: move the picture, redraw it at the end
+  const [, , bw, bh] = v.base, z = clampCutawayZoom(v);
+  const w = bw / z.k, h = bh / z.k;
+  v.svg.setAttribute('viewBox', `${(z.cx - w / 2).toFixed(1)} ${(z.cy - h / 2).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
+  v.svg.classList.toggle('zoomed', z.k > 1.01);
+  cutawayZoomLabels(z);
+}
+// 3.5.1 (the owner: zoom in Life aboard "slow and unusable" on a phone). Redrawing the whole picture at
+// every step of a pinch or a drag (a new viewBox each time) was too much for a phone. Now, while the
+// fingers move, the picture as last drawn is moved and scaled by the graphics hardware (a CSS transform),
+// at most once a frame; when they lift, it is redrawn once, sharp, at the new zoom.
+let cwLive = null;
+function cwLiveStart(v) {
+  if (cwLive) return cwLive;
+  const m = v.svg.getScreenCTM(); if (!m) return null;
+  const vb = (v.svg.getAttribute('viewBox') || v.base.join(' ')).split(/\s+/).map(Number);
+  cwLive = { svg: v.svg, r0: v.svg.getBoundingClientRect(), a: m.a, e: m.e, f: m.f, vc: vb, raf: 0, end: 0 };
+  v.svg.style.transformOrigin = '0 0'; v.svg.style.willChange = 'transform';
+  v.svg.classList.add('gesturing'); v.svg.parentElement?.classList.add('cw-clip');
+  return cwLive;
+}
+function cwLivePaint() {
+  const L = cwLive; if (!L || L.raf) return;
+  L.raf = requestAnimationFrame(() => {
+    if (cwLive !== L) return;
+    L.raf = 0;
+    const v = cutawayView(); if (!v || v.svg !== L.svg) return;
+    const [, , bw, bh] = v.base, z = clampCutawayZoom(v);
+    const w = bw / z.k, h = bh / z.k, x0 = z.cx - w / 2, y0 = z.cy - h / 2;
+    const s = L.vc[2] / w;
+    // The transform that takes the picture as drawn (view vc) to the view asked for (x0, y0, w).
+    const tx = L.a * (L.vc[0] - s * x0) + (1 - s) * (L.e - L.r0.left);
+    const ty = L.a * (L.vc[1] - s * y0) + (1 - s) * (L.f - L.r0.top);
+    L.svg.style.transform = `translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px) scale(${s.toFixed(4)})`;
+    cutawayZoomLabels(z);
+  });
+}
+function cwLiveEnd() {
+  const L = cwLive; if (!L) return;
+  cancelAnimationFrame(L.raf); clearTimeout(L.end);
+  cwLive = null;
+  L.svg.style.transform = ''; L.svg.style.willChange = '';
+  L.svg.classList.remove('gesturing'); L.svg.parentElement?.classList.remove('cw-clip');
+  applyCutawayZoom();
+}
+// The picture's own box on screen (not moved by a gesture in progress).
+const cwRect = (v) => (cwLive && cwLive.svg === v.svg ? cwLive.r0 : v.svg.getBoundingClientRect());
 // Zoom by a factor, keeping the picture point under (px, py) — screen pixels — where it is.
 function zoomCutaway(f, px = null, py = null) {
   const v = cutawayView(); if (!v) return;
-  const z = (shipView.zoom ||= { k: 1, cx: v.base[0] + v.base[2] / 2, cy: v.base[1] + v.base[3] / 2 });
-  const r = v.svg.getBoundingClientRect(), [bx, by, bw, bh] = v.base;
+  const z = clampCutawayZoom(v);
+  const r = cwRect(v), [, , bw, bh] = v.base;
   const w = bw / z.k, h = bh / z.k, x0 = z.cx - w / 2, y0 = z.cy - h / 2;
   const fx = px == null ? 0.5 : (px - r.left) / r.width, fy = py == null ? 0.5 : (py - r.top) / r.height;
   const ax = x0 + fx * w, ay = y0 + fy * h;
@@ -59422,24 +59495,29 @@ function zoomCutaway(f, px = null, py = null) {
 }
 function panCutaway(dxPx, dyPx) {
   const v = cutawayView(); if (!v || !shipView.zoom) return;
-  const r = v.svg.getBoundingClientRect(), z = shipView.zoom;
+  const r = cwRect(v), z = shipView.zoom;
   z.cx -= dxPx * (v.base[2] / z.k) / r.width; z.cy -= dyPx * (v.base[3] / z.k) / r.height;
   applyCutawayZoom();
 }
-let cwDragged = 0;
+let cwDragged = 0, cwTouch = false;
+// How far a finger may wander and still be a tap (a mouse is steadier).
+const cwSlop = () => (cwTouch ? 12 : 5);
 function bindCutawayZoom() {
   const v = cutawayView(); if (!v) return;
+  if (cwLive) { cancelAnimationFrame(cwLive.raf); clearTimeout(cwLive.end); cwLive = null; }
   applyCutawayZoom();
   on('#cwz-in', 'click', () => zoomCutaway(1.5));
   on('#cwz-out', 'click', () => zoomCutaway(1 / 1.5));
   on('#cwz-fit', 'click', () => { shipView.zoom = null; applyCutawayZoom(); });
-  v.svg.addEventListener('wheel', (e) => { e.preventDefault(); zoomCutaway(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX, e.clientY); }, { passive: false });
-  v.svg.addEventListener('dblclick', (e) => { if (!e.target.closest('[data-person],[data-group],[data-slot],[data-captain],[data-zone]')) zoomCutaway(2, e.clientX, e.clientY); });
+  // The wheel zooms live too, and the picture is redrawn when the wheel rests.
+  v.svg.addEventListener('wheel', (e) => { e.preventDefault(); const L = cwLiveStart(v); zoomCutaway(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX, e.clientY); if (L) { clearTimeout(L.end); L.end = setTimeout(cwLiveEnd, 160); } }, { passive: false });
+  v.svg.addEventListener('dblclick', (e) => { if (!e.target.closest('[data-person],[data-group],[data-slot],[data-captain],[data-zone],[data-officer],[data-animal]')) zoomCutaway(2, e.clientX, e.clientY); });
   // Drag to pan (mouse or one finger); two fingers pinch. A drag is not a click on what it started over.
   const pts = new Map(); let pinch = null;
   v.svg.addEventListener('pointerdown', (e) => {
+    cwTouch = e.pointerType !== 'mouse'; cwFinger = { x: e.clientX, y: e.clientY, t: performance.now() };
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); cwDragged = 0;
-    if (pts.size === 2) { cwDragCancel(); const [a, b2] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b2.x, a.y - b2.y) }; }
+    if (pts.size === 2) { cwDragCancel(); const [a, b2] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b2.x, a.y - b2.y) }; cwLiveStart(v); }
     else cwDragMaybe(e, v.svg);
   });
   v.svg.addEventListener('pointermove', (e) => {
@@ -59449,18 +59527,58 @@ function bindCutawayZoom() {
     if (pts.size === 2 && pinch) {
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       const [a, b2] = [...pts.values()], d = Math.hypot(a.x - b2.x, a.y - b2.y);
-      if (pinch.d > 10 && Math.abs(d - pinch.d) > 2) { zoomCutaway(d / pinch.d, (a.x + b2.x) / 2, (a.y + b2.y) / 2); pinch.d = d; cwDragged = 99; }
+      if (pinch.d > 10 && Math.abs(d - pinch.d) > 1) { zoomCutaway(d / pinch.d, (a.x + b2.x) / 2, (a.y + b2.y) / 2); pinch.d = d; cwDragged = 99; }
       return;
     }
     if (Math.abs(dx) + Math.abs(dy) < 1) return;
     cwDragged += Math.abs(dx) + Math.abs(dy);
-    if (cwDragged > 5 && (shipView.zoom?.k || 1) > 1.01) { if (!v.svg.hasPointerCapture?.(e.pointerId)) { try { v.svg.setPointerCapture(e.pointerId); } catch { /* fine */ } } panCutaway(dx, dy); }
+    if (cwDragged > cwSlop() && (shipView.zoom?.k || 1) > 1.01) { if (!v.svg.hasPointerCapture?.(e.pointerId)) { try { v.svg.setPointerCapture(e.pointerId); } catch { /* fine */ } } cwLiveStart(v); panCutaway(dx, dy); }
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   });
-  const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (cwDrag && cwDrag.pointerId === e.pointerId) cwDragEnd(e); };
+  const up = (e) => { if (e.type === 'pointerup') cwFinger = { x: e.clientX, y: e.clientY, t: performance.now() }; pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size && cwLive) cwLiveEnd(); if (cwDrag && cwDrag.pointerId === e.pointerId) cwDragEnd(e); };
   v.svg.addEventListener('pointerup', up); v.svg.addEventListener('pointercancel', up);
   // A drag that panned the picture must not also select whatever it ended over.
-  v.svg.addEventListener('click', (e) => { if (cwDragged > 5) { e.stopPropagation(); e.preventDefault(); } cwDragged = 0; }, true);
+  v.svg.addEventListener('click', (e) => { if (cwDragged > cwSlop()) { e.stopPropagation(); e.preventDefault(); } cwDragged = 0; }, true);
+  // 3.5.1: in Life aboard a man is a few pixels across on a phone and the men stand close together, so
+  // a tap takes the figure nearest the finger (within a fingertip), not whichever outline lies on top
+  // there. The speech bubbles keep their own taps.
+  if (v.svg.classList.contains('routine')) {
+    v.svg.addEventListener('click', (e) => {
+      if (e.defaultPrevented || cwNearBusy || e.target.closest?.('[data-pbub],[data-obub]')) return;
+      // Where the finger was, not where the browser's own fat-finger guess put the click.
+      const at = cwFinger && performance.now() - cwFinger.t < 900 ? cwFinger : { x: e.clientX, y: e.clientY };
+      const c = cwNearest(v.svg, at.x, at.y, cwTouch ? 26 : 12);
+      if (!c.length) return;
+      // A tap on a knot of men too close together for a fingertip to tell apart zooms in on them, far
+      // enough that they stand apart; the next tap takes the man.
+      const k = shipView.zoom?.k || 1;
+      if (cwTouch && c.length > 1 && c[1].m < 18 && k < CW_ZOOM_MAX - 0.01) {
+        const sep = Math.hypot(c[0].x - c[1].x, c[0].y - c[1].y);
+        if (sep < 16) { e.stopPropagation(); e.preventDefault(); zoomCutaway(Math.max(2, Math.min(CW_ZOOM_MAX / k, 24 / Math.max(1, sep))), at.x, at.y); return; }
+      }
+      const best = c[0].f;
+      if (best === e.target.closest?.(CW_FIGS)) return;
+      e.stopPropagation(); e.preventDefault();
+      cwNearBusy = true;
+      try { best.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY })); } finally { cwNearBusy = false; }
+    }, true);
+  }
+}
+const CW_FIGS = '[data-person],[data-officer],[data-animal],[data-captain]';
+let cwNearBusy = false, cwFinger = null;
+// The figures near a point on screen, within r pixels of their outlines, nearest first: by the distance
+// to each box, and among boxes the finger is inside, by the distance to the middle.
+function cwNearest(svg, x, y, r) {
+  const c = [];
+  for (const f of svg.querySelectorAll(CW_FIGS)) {
+    const b = f.getBoundingClientRect(); if (!b.width && !b.height) continue;
+    const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    const out = Math.hypot(Math.max(0, Math.abs(x - cx) - b.width / 2), Math.max(0, Math.abs(y - cy) - b.height / 2));
+    if (out > r) continue;
+    const m = Math.hypot(x - cx, y - cy);
+    c.push({ f, d: out + 0.35 * m, m, x: cx, y: cy });
+  }
+  return c.sort((a, b) => a.d - b.d);
 }
 
 // ---------- picking men up and putting them down (2.1.6, owner's request) ----------
@@ -59963,17 +60081,25 @@ function aboardScreen(pick = undefined, result = null, fresh = false) {
     <div class="cw-wrap"><div class="cw-pic"><div class="cw-zoom" role="toolbar" aria-label="Zoom the picture"><button class="btn small" id="cwz-out" title="Zoom out (−)">−</button><span id="cwz-lvl" class="cwz-lvl">×1</span><button class="btn small" id="cwz-in" title="Zoom in (+)">+</button><button class="btn small ghost" id="cwz-fit" title="The whole ship (0)">Whole ship</button></div>${svg}
       <div class="watch-log"><p class="muted"><i>${esc(W.desc)}</i></p><ul>${lines.slice(0, 9).map((l) => `<li>${esc(l)}</li>`).join('')}${asleep ? `<li class="muted">${asleep.ids.length} of the watch below are asleep in their hammocks.</li>` : ''}</ul>
       ${talk.length ? `<div class="wardroom"><h4>Overheard in the gunroom</h4>${talk.map((t) => { const o = shipboard.officerById(st, t.oid); return o ? `<div class="said">${oImg(o, 28, 34)}<span><b>${esc(o.name.split(' ')[0])}:</b> ${esc(t.text)}</span></div>` : ''; }).join('')}</div>` : ''}</div></div>
-      <div class="cw-side">${side}${sel ? '<p><button class="link" id="ab-back">← Back to the ship\'s day</button></p>' : ''}</div></div>
+      <div class="cw-side">${side}${sel ? `<p><button class="link" id="ab-back">← Back to the ship's day</button>${isPhone() ? ' · <button class="link" id="ab-up">↑ The picture</button>' : ''}</p>` : ''}</div></div>
   </div>`, 'wide');
   bindCutawayZoom();
+  // 3.5.1: on a phone the page about the man you tapped is below the picture; bring it up.
+  if (aboardView.reveal) {
+    const to = aboardView.reveal === 'pic' ? '.cw-pic' : '.cw-side';
+    aboardView.reveal = false;
+    if (isPhone()) requestAnimationFrame(() => overlay.querySelector(`.aboard-panel ${to}`)?.scrollIntoView({ block: 'start' }));
+  }
   const again = (sel2 = undefined, r = null) => aboardScreen(sel2 === undefined ? aboardView.sel : sel2, r);
+  const look = (s2) => { aboardView.reveal = true; again(s2); };
   on('#ab-close', 'click', closeAboard);
-  on('#ab-back', 'click', () => aboardScreen(null));
-  on('.cutaway [data-person]', 'click', (e) => again({ kind: 'person', id: +e.currentTarget.dataset.person }));
-  on('.cutaway [data-pbub]', 'click', (e) => { const m = shipboard.momentFor(st, +e.currentTarget.dataset.pbub); again(m ? { kind: 'moment', id: m.id } : { kind: 'person', id: +e.currentTarget.dataset.pbub }); });
-  on('.cutaway [data-officer]', 'click', (e) => again({ kind: 'officer', id: +e.currentTarget.dataset.officer }));
-  on('.cutaway [data-obub]', 'click', (e) => { const m = shipboard.momentForOfficer(st, +e.currentTarget.dataset.obub); again(m ? { kind: 'moment', id: m.id } : { kind: 'officer', id: +e.currentTarget.dataset.obub }); });
-  on('.cutaway [data-captain]', 'click', () => again({ kind: 'captain' }));
+  on('#ab-back', 'click', () => { aboardView.reveal = 'pic'; aboardScreen(null); });
+  on('#ab-up', 'click', () => overlay.querySelector('.aboard-panel .cw-pic')?.scrollIntoView({ block: 'start' }));
+  on('.cutaway [data-person]', 'click', (e) => look({ kind: 'person', id: +e.currentTarget.dataset.person }));
+  on('.cutaway [data-pbub]', 'click', (e) => { const m = shipboard.momentFor(st, +e.currentTarget.dataset.pbub); look(m ? { kind: 'moment', id: m.id } : { kind: 'person', id: +e.currentTarget.dataset.pbub }); });
+  on('.cutaway [data-officer]', 'click', (e) => look({ kind: 'officer', id: +e.currentTarget.dataset.officer }));
+  on('.cutaway [data-obub]', 'click', (e) => { const m = shipboard.momentForOfficer(st, +e.currentTarget.dataset.obub); look(m ? { kind: 'moment', id: m.id } : { kind: 'officer', id: +e.currentTarget.dataset.obub }); });
+  on('.cutaway [data-captain]', 'click', () => look({ kind: 'captain' }));
   on('[data-aboard-off]', 'click', (e) => again({ kind: 'officer', id: +e.currentTarget.dataset.aboardOff }));
   on('[data-moment]', 'click', (e) => again({ kind: 'moment', id: +e.currentTarget.dataset.moment }));
   on('[data-mopt]', 'click', (e) => {
@@ -59995,7 +60121,7 @@ function aboardScreen(pick = undefined, result = null, fresh = false) {
   on('#ab-answer', 'click', () => { const r = grievanceMod.answerTalker(game, sel.id); again(undefined, { kind: r.ok && r.good ? 'good' : r.ok ? 'bad' : 'bad', text: r.ok ? r.text : r.err }); });
   on('.cutaway [data-animal]', 'click', (e) => again(undefined, { kind: 'info', text: animalLine(+e.currentTarget.dataset.animal) }));
   on('[data-animalpick]', 'click', (e) => again(undefined, { kind: 'info', text: animalLine(+e.currentTarget.dataset.animalpick) }));
-  on('[data-talk]', 'click', (e) => again({ kind: 'person', id: +e.currentTarget.dataset.talk }));
+  on('[data-talk]', 'click', (e) => look({ kind: 'person', id: +e.currentTarget.dataset.talk }));
   function animalLine(id) {
     const a = animalsMod.living(st).find((x) => x.id === id);
     if (!a) return 'Gone.';
@@ -61214,6 +61340,7 @@ const pinchEnd = (e) => { if (!pinchPts.delete(e.pointerId)) return; if (pinchPt
 canvas.addEventListener('pointerup', pinchEnd); canvas.addEventListener('pointercancel', pinchEnd);
 
 // ---------- frame loop ----------
+let seaSkip = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - lastFrame) / 1000);
   lastFrame = now;
@@ -61248,8 +61375,13 @@ function frame(now) {
     drainEvents();
     soundscape(dt);
     const st5 = game.state, ph = daytime.phaseOf(st5);
-    renderer.draw(game, dt, { snapCamera: snap, dark: st5.mode === 'sea' || st5.mode === 'port' ? daytime.darkness(st5) : 0, warm: ph === 'dawn' || ph === 'dusk' ? 1 - Math.abs(daytime.darkness(st5) - 0.5) * 2 : 0, combat: st5.mode === 'sea' && director.inCombat(game) });
-    snap = false;
+    // 3.5.1: behind a screen that covers a phone (Life aboard, the ship, the crew...), the sea is drawn a
+    // few times a second, and not at all while a finger is pinching or dragging a picture.
+    const covered = screen !== 'play' && document.body.classList.contains('phone');
+    seaSkip = covered ? (seaSkip + 1) % 8 : 0;
+    const drawSea = !(covered && (cwLive || seaSkip));
+    if (drawSea) renderer.draw(game, dt, { snapCamera: snap, dark: st5.mode === 'sea' || st5.mode === 'port' ? daytime.darkness(st5) : 0, warm: ph === 'dawn' || ph === 'dusk' ? 1 - Math.abs(daytime.darkness(st5) - 0.5) * 2 : 0, combat: st5.mode === 'sea' && director.inCombat(game) });
+    if (drawSea) snap = false;
     if (!$('#hud').classList.contains('hidden')) {
       drawCompass();
       hudTimer -= dt;

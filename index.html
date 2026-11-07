@@ -1294,6 +1294,111 @@ body.phone .sh-clue .riddle { font-size: 13.5px; }
   .shore-panel .shore-head h2 { font-size: 20px; }
 }
 
+/* ---------- the hand of special orders (3.5.2, owner's request) ----------
+   During a fight the orders dealt are a fanned hand of engraved cards along the bottom of the screen,
+   the crew's strength in a brass medallion at its left, and a card just played leaving a slot that
+   counts down to the next. Hover (or a first tap) raises a card and shows the whole order on a plate
+   above the hand. On a phone the cards rest half tucked below the edge, to keep the sea clear. */
+body { --hd-bottom: 68px; --hd-cw: 114px; --hd-ch: 166px; --hd-tuck: 0px; --hd-med: 66px; }
+body.touch { --hd-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); --hd-cw: 100px; --hd-ch: 142px; }
+body.phone { --hd-bottom: calc(4px + env(safe-area-inset-bottom, 0px)); --hd-cw: 78px; --hd-ch: 110px; --hd-tuck: 40px; --hd-med: 46px; }
+/* Upright, the hand stands above the rows of buttons, whole: there is no edge there to tuck it under. */
+body.phone.phone-portrait { --hd-bottom: calc(136px + env(safe-area-inset-bottom, 0px)); --hd-tuck: 0px; --hd-cw: 74px; --hd-ch: 104px; }
+#hand { position: fixed; left: 50%; bottom: var(--hd-bottom); z-index: 13; display: flex; align-items: flex-end; gap: 16px; pointer-events: none; opacity: 0; transform: translate(-50%, calc(100% + var(--hd-bottom) + 24px)); transition: transform .55s cubic-bezier(.2,.75,.25,1), opacity .35s ease; }
+#hand.on { opacity: 1; transform: translate(-50%, 0); }
+#hand .hand-cards { display: flex; align-items: flex-end; padding-left: calc(var(--hd-cw) * 0.12); }
+/* The medallion: the crew's strength, and a ring filling towards the next point. */
+#hand .hand-strength { position: relative; flex: none; width: var(--hd-med); height: var(--hd-med); margin-bottom: 20px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; cursor: help;
+  background: radial-gradient(circle at 38% 32%, #fbf2d8, #e6cf98 62%, #cfb06c);
+  box-shadow: 0 0 0 2px #6a4f22, 0 0 0 5px #c99a3a, 0 0 0 6.5px #5a4019, 0 7px 16px rgba(0,0,0,.55), inset 0 1px 3px rgba(255,255,255,.6), inset 0 -3px 6px rgba(120,80,20,.25); }
+#hand .hs-ring { position: absolute; inset: -9px; width: calc(100% + 18px); height: calc(100% + 18px); pointer-events: none; }
+#hand .hs-n { font-family: "Times New Roman", Times, serif; font-weight: normal; font-size: calc(var(--hd-med) * 0.42); line-height: 1; color: var(--ink); }
+#hand .hs-of { font-size: calc(var(--hd-med) * 0.16); color: var(--ink-soft); font-style: italic; line-height: 1.1; }
+#hand .hs-l { position: absolute; top: calc(100% + 10px); left: 50%; translate: -50% 0; font-family: var(--display); font-size: 12px; letter-spacing: .08em; color: #f3e6c4; text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.6); white-space: nowrap; }
+#hand .hand-strength.pulse { animation: hs-pulse .55s ease-out; }
+@keyframes hs-pulse { 0% { scale: 1; } 35% { scale: 1.14; } 100% { scale: 1; } }
+#hand .rg-bed { fill: none; stroke: rgba(30,20,8,.35); stroke-width: 2.4; }
+#hand .rg-arc { fill: none; stroke: #f0cd72; stroke-width: 2.4; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset .4s linear; filter: drop-shadow(0 0 2px rgba(240,205,114,.6)); }
+#hand .hand-strength.full .rg-arc { stroke: rgba(240,205,114,.55); filter: none; }
+/* A card. */
+.ocard { --edge: #6e2418; --band: #7a2a1c; position: relative; flex: none; width: var(--hd-cw); height: var(--hd-ch); margin: 0 0 0 calc(var(--hd-cw) * -0.12); padding: 0; border: 1.5px solid var(--edge); border-radius: 9px; display: flex; flex-direction: column; align-items: center; text-align: center; overflow: visible; cursor: pointer; pointer-events: auto; color: var(--ink); font-family: var(--body);
+  background: radial-gradient(ellipse at 28% 16%, rgba(255,255,255,.5), transparent 55%), radial-gradient(ellipse at 78% 96%, rgba(140,98,40,.24), transparent 60%), linear-gradient(#f6ebcc, #e3cd99);
+  box-shadow: inset 0 0 0 3px #f7edd3, inset 0 0 0 4px rgba(110,80,30,.5), 0 9px 18px rgba(0,0,0,.5);
+  transform-origin: 50% 140%; transform: translateY(calc(var(--hd-tuck) + var(--dy, 0px))) rotate(calc(var(--o, 0) * 5deg));
+  transition: transform .24s cubic-bezier(.2,.8,.3,1), box-shadow .24s, filter .24s; }
+#hand .ocard:first-child { margin-left: 0; }
+.ocard.officer { --edge: #23404c; --band: #2b4d5a; }
+#hand .ocard.can { box-shadow: inset 0 0 0 3px #f7edd3, inset 0 0 0 4px rgba(110,80,30,.5), 0 0 0 1px rgba(236,196,100,.85), 0 0 16px rgba(236,196,100,.38), 0 9px 18px rgba(0,0,0,.5); }
+#hand .ocard.cannot { filter: saturate(.25) brightness(.78); cursor: not-allowed; }
+.ocard .oc-cost { position: absolute; left: -9px; top: -9px; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: "Times New Roman", Times, serif; font-weight: bold; font-size: 17px; color: #f7e6c3; text-shadow: 0 1px 1px rgba(0,0,0,.6); z-index: 1;
+  background: radial-gradient(circle at 36% 30%, #d0574a, #95251a 58%, #6a150d); box-shadow: 0 2px 5px rgba(0,0,0,.5), inset 0 0 0 2px rgba(60,8,4,.35), inset 0 2px 2px rgba(255,200,180,.25); }
+.ocard.cannot .oc-cost { background: radial-gradient(circle at 36% 30%, #8d8277, #5e554c 60%, #433b34); }
+.ocard .oc-name { margin-top: 9px; padding: 0 9px 0 17px; min-height: 2.25em; display: flex; align-items: center; justify-content: center; font-family: var(--display); font-size: 13px; line-height: 1.06; letter-spacing: .01em; }
+.ocard .oc-art { width: calc(100% - 16px); height: 35%; margin: 2px 8px 0; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(90,60,25,.45); border-radius: 4px; background: radial-gradient(ellipse at 50% 42%, rgba(255,251,238,.92), rgba(228,208,160,.55) 75%); box-shadow: inset 0 0 6px rgba(120,85,35,.25); }
+.ocard .oc-art svg { height: 88%; width: auto; }
+.ocard .oc-who { margin-top: 5px; padding: 1px 12px; font-family: var(--display); font-size: 9.5px; letter-spacing: .05em; color: #f5e8ca; background: var(--band); clip-path: polygon(0 0, 100% 0, 94% 50%, 100% 100%, 0 100%, 6% 50%); white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
+.ocard .oc-text { margin: 4px 8px 0; font-size: 10.5px; line-height: 1.2; color: var(--ink-soft); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ocard .oc-key { position: absolute; right: 6px; bottom: 4px; font-family: var(--display); font-size: 9px; color: var(--ink-soft); opacity: .7; background: none; border: none; padding: 0; }
+@media (hover: hover) { #hand .ocard:hover { transform: translateY(-28px) rotate(0deg) scale(1.1); z-index: 5; } }
+#hand .ocard.sel { transform: translateY(-20px) rotate(0deg) scale(1.08); z-index: 5; }
+#hand .ocard:focus-visible { outline: 2px solid #f0cd72; outline-offset: 3px; }
+#hand .ocard.deal { animation: oc-deal .6s cubic-bezier(.2,.8,.25,1) backwards; animation-delay: calc(var(--d, 0) * 120ms + 150ms); }
+@keyframes oc-deal { from { transform: translate(90px, calc(100% + 60px)) rotate(18deg); opacity: 0; } 60% { opacity: 1; } }
+#hand .ocard.shake { animation: oc-shake .4s ease; }
+@keyframes oc-shake { 0%, 100% { translate: 0 0; } 20% { translate: -6px 0; } 40% { translate: 5px 0; } 60% { translate: -4px 0; } 80% { translate: 2px 0; } }
+/* A card given: it rises in a gilt glow and is gone. */
+.ocard-ghost { position: fixed !important; margin: 0 !important; z-index: 30; pointer-events: none !important; transform: none !important; animation: oc-play .65s cubic-bezier(.3,.7,.3,1) forwards !important; }
+@keyframes oc-play { 0% { opacity: 1; translate: 0 0; scale: 1; filter: none; } 30% { opacity: 1; translate: 0 -46px; scale: 1.14; filter: brightness(1.15) drop-shadow(0 0 14px rgba(244,208,120,.95)); } 100% { opacity: 0; translate: 0 -120px; scale: 1.2; filter: brightness(1.35) drop-shadow(0 0 22px rgba(244,208,120,0)); } }
+/* The slot of a card just given, counting down to the next. */
+#hand .ocard-slot { flex: none; width: var(--hd-cw); height: var(--hd-ch); margin-left: calc(var(--hd-cw) * -0.12); border: 1.5px dashed rgba(239,224,185,.55); border-radius: 9px; background: rgba(20,14,8,.32); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: calc(var(--hd-ch) * 0.2); gap: 6px; color: #f3e6c4; text-shadow: 0 1px 2px #000;
+  transform-origin: 50% 140%; transform: translateY(calc(var(--hd-tuck) + var(--dy, 0px))) rotate(calc(var(--o, 0) * 5deg)); }
+#hand .os-dial { position: relative; width: 46px; height: 46px; }
+#hand .os-dial svg { width: 100%; height: 100%; }
+#hand .os-s { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: "Times New Roman", Times, serif; font-weight: normal; font-size: 17px; }
+#hand .os-l { font-family: var(--display); font-size: 11px; letter-spacing: .06em; opacity: .85; }
+/* The plate: the whole order, above the hand. */
+#hand-plate { position: fixed; z-index: 14; left: 50%; bottom: calc(var(--hd-bottom) + var(--hd-ch) + 46px); width: min(380px, calc(100vw - 24px)); padding: 11px 18px 10px; text-align: center; color: var(--ink); pointer-events: none; opacity: 0; transform: translate(-50%, 8px); transition: opacity .18s ease, transform .18s ease;
+  background: radial-gradient(ellipse at 30% 20%, rgba(255,255,255,.4), transparent 60%), linear-gradient(#f5e9c9, #e6d2a2); border: 1.5px solid #8a6a36; outline: 3px double rgba(90,60,25,.42); outline-offset: -7px; border-radius: 6px; box-shadow: 0 10px 26px rgba(0,0,0,.55); }
+#hand-plate.show { opacity: 1; transform: translate(-50%, 0); }
+#hand-plate b { display: block; font-family: var(--display); font-weight: normal; font-size: 18px; }
+#hand-plate i { display: block; font-size: 12.5px; color: var(--ink-soft); margin-top: 1px; }
+#hand-plate span { display: block; font-size: 14px; line-height: 1.32; margin-top: 5px; }
+#hand-plate em { display: block; font-style: normal; font-family: var(--display); font-size: 12.5px; color: #6a4a1a; margin-top: 6px; }
+#hand-plate em.no { color: var(--bad); }
+/* Make room: the prompt, the sighting and the song go above the hand; the key strip steps aside. */
+body.hand-on #prompt { bottom: calc(var(--hd-bottom) + var(--hd-ch) - var(--hd-tuck) + 16px) !important; }
+body.hand-on .hud-sailho { bottom: calc(var(--hd-bottom) + var(--hd-ch) - var(--hd-tuck) + 58px) !important; top: auto !important; }
+body.hand-on #lyrics { bottom: calc(var(--hd-bottom) + var(--hd-ch) - var(--hd-tuck) + 64px); }
+body.hand-on .hud-keys { opacity: 0; pointer-events: none; }
+/* A phone: smaller cards, half tucked; a raised card shows its name and engraving, the plate the rest. */
+body.phone #hand { gap: 10px; }
+body.phone #hand .hand-strength { margin-bottom: 8px; }
+body.phone #hand .hs-l, body.phone .ocard .oc-text, body.phone .ocard .oc-key { display: none; }
+body.phone .ocard .oc-who { font-size: 7.5px; padding: 1px 8px; margin-top: 4px; }
+body.phone .ocard .oc-cost { width: 24px; height: 24px; left: -7px; top: -7px; font-size: 15px; }
+body.phone .ocard .oc-name { margin-top: 6px; padding: 0 5px 0 12px; font-size: 10px; min-height: 2.3em; }
+body.phone .ocard .oc-art { height: 40%; margin-top: 1px; }
+body.phone #hand .ocard.sel { transform: translateY(-10px) rotate(0deg) scale(1.06); }
+body.phone #hand-plate { bottom: calc(var(--hd-bottom) + var(--hd-ch) + 8px); width: min(340px, calc(100vw - 16px)); padding: 8px 12px 7px; }
+/* On a phone the ship is in the middle of the screen, just above the hand: the plate goes to the top
+   instead (under the status strip), over the panels for the moment it is read, never over the sea. */
+body.phone.phone-portrait #hand-plate { top: calc(env(safe-area-inset-top, 0px) + 34px); bottom: auto; }
+body.phone:not(.phone-portrait) #hand-plate { top: calc(env(safe-area-inset-top, 0px) + 36px); bottom: auto; width: min(560px, calc(100vw - 300px)); min-width: 320px; padding: 6px 14px 5px; }
+body.phone:not(.phone-portrait) #hand-plate span { font-size: 11.5px; line-height: 1.25; }
+body.phone #hand-plate b { font-size: 15px; }
+body.phone #hand-plate i { font-size: 11px; }
+body.phone #hand-plate span { font-size: 12.5px; margin-top: 3px; }
+body.phone #hand-plate em { font-size: 11.5px; margin-top: 4px; }
+body.phone #hand .os-dial { width: 34px; height: 34px; }
+body.phone #hand .os-s { font-size: 13px; }
+body.phone #hand .os-l { font-size: 9px; }
+body.phone #hand .ocard-slot { padding-top: 8px; gap: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  #hand, #hand .ocard, #hand-plate { transition: none; }
+  #hand .ocard.deal, #hand .ocard.shake, #hand .hand-strength.pulse { animation: none; }
+  .ocard-ghost { display: none; }
+}
+
 </style>
 </head>
 <body>
@@ -8759,7 +8864,7 @@ const DEFAULT_LABELS = {
   sailUp: 'W', sailDown: 'S', left: 'A', right: 'D', firePort: 'Q', fireStarboard: 'E', interact: 'F', board: 'B', raid: 'R',
   chart: 'M', captain: 'C', help: 'H', strike: 'K', jettison: 'J', autopilot: 'G', hasten: 'Z', safeMode: 'the 🛡 button', report: 'Y',
   glass: 'L', ship: 'U', aboard: 'I', quests: 'P', log: 'the ✒ Log tab', sing: 'V', crew: 'N', stations: 'T', fleetOrder: 'O', shotCycle: 'X',
-  dig: 'X', escape: 'Esc', cards: 'Shift+1–3', belt: '5–9',
+  dig: 'X', escape: 'Esc', cards: 'a click, or Shift+1–3', belt: '5–9',
 };
 
 let labeller = (a) => DEFAULT_LABELS[a] || a;
@@ -43464,7 +43569,7 @@ const HASTEN = 4;               // time runs this many times faster while hasten
 const NEAR_RANGE = 3600;                  // beyond this, NPCs use cheap abstract movement
 const POPULATION = { merchant: 16, patrol: 8, pirate: 7 }; // pirates: set by the difficulty preset
 const SAVE_VERSION = 9;
-const GAME_VERSION = '3.5.1'; // shown on the main menu
+const GAME_VERSION = '3.5.2'; // shown on the main menu
 
 function cargoValue(cargo) { return Object.entries(cargo || {}).reduce((a, [g, q]) => a + (GOODS[g]?.base || 0) * q, 0); }
 
@@ -53549,7 +53654,7 @@ const GUIDE = [
   { id: 'shot', area: 'fight', title: 'Shot', text: 'Round shot smashes hulls and dismounts guns; chain tears sails so she cannot run; grape sweeps her deck before you board; fire shot sets her alight and loads slowly. Change with 1–4 or {k:shotCycle}.' },
   { id: 'raking', area: 'fight', title: 'Raking', text: 'Come near an enemy\'s bow or stern line and the line is drawn on the water. A broadside down her length from there does terrible work, and hers cannot answer.' },
   { id: 'stations', area: 'fight', title: 'Battle stations', text: '{k:stations} sets where the hands go: battle stations, all hands to the guns (faster broadsides), damage control (pumps and plugs, slower guns) or make sail (faster and handier).' },
-  { id: 'deck', kw: 'cards orders strength', area: 'fight', title: 'The order deck', text: 'Special orders are cards. Every fight deals three onto the HUD; each costs the crew\'s strength (the pips, set by how many and how cheerful they are), and a played card is replaced after twenty seconds. Play with {k:cards} or a click. After a fight the old hands may teach you a new one.' },
+  { id: 'deck', kw: 'cards orders strength', area: 'fight', title: 'The order deck', text: 'Special orders are cards. Every fight deals three, fanned along the bottom of the screen. Each costs some of the crew\'s strength (the red seal on the card); the brass medallion beside the hand is the strength they have left, set by how many they are and how cheerful, and its ring fills as a point comes back (one every forty-five seconds). Hover over a card, or tap it once, to read the whole order; give it with {k:cards}. The fight does not wait while you read. A card given leaves a slot that counts down to the next, twenty seconds later. After a fight the old hands may teach you a new one.' },
   { id: 'belt', kw: 'smoke flares stinkpots', area: 'fight', title: 'The battle belt', text: 'Smoke pots, flares, stinkpots, a cask of rum for the boarders and a doctor\'s kit, bought at the chandler (the market tab) and used at sea with {k:belt}. They are small, and they turn fights.' },
   { id: 'board', area: 'fight', title: 'Boarding', text: 'Come alongside, slow down and press {k:board}. The fight on her deck is in real time with your named people. If her captain shows himself you can challenge him to a duel.' },
   { id: 'duels', kw: 'sword fencing', area: 'fight', title: 'Duels', text: 'A duel is fought side-on, in real time: guard high or low, cut, thrust, parry, kick, close. Four levels set the speed; the learning aids call his blows. Practise from the main menu at any time.' },
@@ -54189,6 +54294,237 @@ function describe(game, f) {
 }
 
 return { MIN_ZOOM, MAX_ZOOM, defaultView, clampView, transformFor, screenToWorld, worldToScreen, zoomAt, panBy, centreOn, pick, passage, describe };
+})();
+
+// ---- src/ui/orderhand.js ----
+const __m_src_ui_orderhand_js = (() => {
+// The hand of special orders (3.5.2, the owner: "It keeps telling me cards are being drawn during
+// battle I can choose, I can't see them. Can you have them appear in a dignified, classy manner at the
+// bottom of the screen during battles? Something like Slay the Spire.").
+//
+// The deck itself is core/orderdeck.js: three orders dealt when a fight begins, each costing some of
+// the crew's strength, a played one replaced twenty seconds later, strength coming back one point in
+// forty-five. This draws it: a fanned hand of engraved cards along the bottom of the screen, the
+// crew's strength in a brass medallion beside it, and the slot of a card just played counting down to
+// the next. The fight does not stop for it (there is no turn): with a mouse, a click gives the order
+// and hovering reads it; with a finger, the first tap raises a card to read and the second gives it.
+// On a phone the hand rests half tucked below the edge of the screen, to leave the sea clear.
+//
+//   mountHand(host, { play, touchPhone }) once; updateHand(game, fight) every HUD frame.
+
+const orderdeck = __m_src_core_orderdeck_js;
+const { availableOrders } = __m_src_core_perks_js;
+const { OFFICER_ROLES } = __m_src_data_definitions_js;
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// What each order does, short enough for the face of a card (the whole of it is on the plate above).
+const GIST = {
+  falseColours: 'A lawful flag: they hold their fire a while.',
+  heaveTo: 'She lies still; her guns laid true and quick.',
+  cutAndRun: 'Faster for half a minute; a far chaser gives up.',
+  crossT: 'Your next broadside rakes her length.',
+  kedgeOff: 'Off the ground at once, or warped along.',
+  fireRaft: 'A burning raft down on a foe close by.',
+  grapeBoard: 'Grape in every gun; the boarders mustered.',
+  prayers: 'Hats off: their hearts lift, the strain eases.',
+  mortars: 'A shell on a ship within two gunshots.',
+  outOars: 'A quarter faster, wind or no wind.',
+  doubleShot: 'The next broadside hits half again as hard.',
+  rollingFire: 'Gun by gun as they bear: truer fire.',
+  quickTack: 'Every hand to the braces: she turns quick.',
+  crowdSail: 'Every stitch she can carry: faster.',
+  weatherGauge: 'The shift seen coming: faster, handier.',
+  shoals: 'A channel only you know: a chaser loses you.',
+  boardersAway: 'The picked men first: a stronger boarding.',
+  musketry: 'Muskets along the rail drop her people.',
+  steady: 'The quartermaster walks the deck: heart.',
+  shares: 'Double shares promised: great heart.',
+  pumps: 'Leaks and fires fought three times as hard.',
+  cutAway: 'Axes to the shrouds: the wreck cut free.',
+  triage: 'Fewer of the struck die, this fight.',
+  spiritRoom: 'A tot for every hand: heart, and ease.',
+  jettison: 'The cheapest fifth over the side: lighter.',
+};
+
+// The engravings: one small plate for each order, in ink on the card's paper, 48 units square.
+const INK = '#2b1d0e', RED = '#9e2a1f', BRASS = '#b8892f', PAPER = '#efe2bf';
+const ln = (d, w = 1.6) => `<path d="${d}" fill="none" stroke="${INK}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+const fl = (d, fill, w = 1.3) => `<path d="${d}" fill="${fill}" stroke="${INK}" stroke-width="${w}" stroke-linejoin="round"/>`;
+const ball = (x, y, r = 3.2, fill = INK) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${INK}" stroke-width="1"/>`;
+const sea = (y) => ln(`M5 ${y} q3.5 -2.6 7 0 t7 0 t7 0 t7 0 t7 0 t7 0`, 1.2);
+const hull = (y) => fl(`M9 ${y} L39 ${y} L35 ${y + 7} L13 ${y + 7} Z`, '#c49a5c');
+const cutlass = (flip) => `<g${flip ? ' transform="translate(48 0) scale(-1 1)"' : ''}>${fl('M13 39 C18 30 27 18 38 8 C36 15 28 27 17 41 Z', '#d9d2c0', 1.1)}${ln('M11 36 Q15 41 20 41', 1.8)}${ln('M14 41 L9 46', 2.4)}</g>`;
+const ART = {
+  falseColours: ln('M15 5 V44') + fl('M15 7 C22 4 29 11 38 8 V25 C29 28 22 21 15 24 Z', PAPER) + ln('M26.5 7.5 V24.5', 2.6).replace(INK, RED) + ln('M15 15.5 C22 12.5 29 19.5 38 16.5', 2.6).replace(INK, RED) + ln('M8 44 H22'),
+  heaveTo: ln('M24 4 V44') + ln('M9 13 H39') + fl('M10 13 Q24 24 38 13 L36 33 Q24 26 12 33 Z', PAPER) + ln('M12 33 H36') + sea(42),
+  cutAndRun: ln('M24 31 V8') + fl('M24 10 Q34 18 24 28 Z', PAPER) + fl('M23 11 Q15 18 23 27 Z', PAPER) + hull(31) + ln('M3 20 H11', 1.3) + ln('M1 25 H9', 1.3) + ln('M5 15 H10', 1.3) + sea(43),
+  crossT: fl('M5 12 Q8 7 18 7 H39 Q43 12 39 17 H18 Q8 17 5 12 Z', '#c49a5c') + `<circle cx="16" cy="12" r="1.7" fill="${INK}"/><circle cx="24" cy="12" r="1.7" fill="${INK}"/><circle cx="32" cy="12" r="1.7" fill="${INK}"/>` + fl('M24 25 Q30.5 31 29.5 45 H18.5 Q17.5 31 24 25 Z', '#8f8a7c') + `<circle cx="24" cy="33" r="1.4" fill="${INK}"/><circle cx="24" cy="39.5" r="1.4" fill="${INK}"/>` + ln('M17 18.5 L21.5 25 M24 18.5 V24 M31 18.5 L26.5 25', 1.1).replace('stroke-linecap="round"', 'stroke-linecap="round" stroke-dasharray="1.6 1.9"'),
+  kedgeOff: `<circle cx="24" cy="8" r="3.2" fill="none" stroke="${INK}" stroke-width="1.6"/>` + ln('M24 11 V41', 2) + ln('M16 16 H32', 2) + ln('M9 29 Q11 41 24 41 Q37 41 39 29', 2) + ln('M9 29 L6.5 34 M9 29 L13.5 31.5') + ln('M39 29 L41.5 34 M39 29 L34.5 31.5'),
+  fireRaft: fl('M24 5 C31 13 35 18 33 26 C32 32 28 35 24 35 C19 35 15 32 16 26 C17 21 21 19 22 13 C24 17 25 19 26 21 C27 17 26 11 24 5 Z', '#c4502c') + fl('M24 20 C27 24 28 27 27 30 C26 33 22 33 21 30 C20 27 23 25 24 20 Z', '#e8b04a', 1) + ln('M9 39 H39', 2.2) + ln('M11 43 H37', 2.2) + ln('M14 37 V45 M24 37 V45 M34 37 V45', 1.1),
+  grapeBoard: ball(10, 10) + ball(16.5, 10) + ball(7, 16) + ball(13.5, 16) + ball(20, 16) + ball(10, 22) + ball(16.5, 22) + cutlass(false),
+  prayers: ln('M24 5 V43', 2.6) + ln('M14 15 H34', 2.6) + ln('M15 43 H33', 1.2) + ln('M8 9 L11 11 M40 9 L37 11 M6 20 H9.5 M42 20 H38.5', 1),
+  mortars: ball(21, 29, 11.5, '#3a3128') + `<circle cx="17" cy="25" r="3" fill="#6c6156"/>` + ln('M28 19.5 Q31 12 37 11', 1.7) + ln('M38 7 V11 M38 11 L41 8 M38 11 H42 M38 11 L41 14', 1.2).replace(INK, RED),
+  outOars: ln('M9 7 L33 35', 2) + fl('M33 35 L40 38 L43 44 L37 42 Z', '#c49a5c') + ln('M39 7 L15 35', 2) + fl('M15 35 L8 38 L5 44 L11 42 Z', '#c49a5c') + sea(44).replace('M5 44', 'M5 46'),
+  doubleShot: fl('M7 26 L31 19.5 L33 26 L9 32.5 Z', '#5b5045') + `<rect x="31.2" y="18.6" width="3.4" height="8.2" rx="1" transform="rotate(-15 33 22.7)" fill="#5b5045" stroke="${INK}" stroke-width="1.1"/>` + `<circle cx="15" cy="35" r="5.5" fill="${PAPER}" stroke="${INK}" stroke-width="1.5"/>` + ln('M15 29.5 V40.5 M9.5 35 H20.5', 1) + ball(39, 13) + ball(43, 21),
+  rollingFire: fl('M4 31 H44 V39 H4 Z', '#c49a5c') + `<rect x="9" y="32.5" width="5" height="5" fill="${INK}"/><rect x="21.5" y="32.5" width="5" height="5" fill="${INK}"/><rect x="34" y="32.5" width="5" height="5" fill="${INK}"/>` + `<circle cx="11.5" cy="25" r="3.5" fill="#e6e0d2" stroke="${INK}" stroke-width="1"/><circle cx="24" cy="21" r="5" fill="#e6e0d2" stroke="${INK}" stroke-width="1"/><circle cx="36.5" cy="15" r="6.5" fill="#e6e0d2" stroke="${INK}" stroke-width="1"/>` + sea(44),
+  quickTack: `<circle cx="24" cy="24" r="11" fill="none" stroke="${INK}" stroke-width="2.2"/><circle cx="24" cy="24" r="3.6" fill="#c49a5c" stroke="${INK}" stroke-width="1.4"/>` + [0, 45, 90, 135, 180, 225, 270, 315].map((a) => { const r = (a * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r); return ln(`M${(24 + c * 3.6).toFixed(1)} ${(24 + s * 3.6).toFixed(1)} L${(24 + c * 17).toFixed(1)} ${(24 + s * 17).toFixed(1)}`, 1.6) + `<circle cx="${(24 + c * 18.5).toFixed(1)}" cy="${(24 + s * 18.5).toFixed(1)}" r="1.8" fill="#c49a5c" stroke="${INK}" stroke-width="1"/>`; }).join(''),
+  crowdSail: ln('M24 4 V45') + fl('M15 8 Q24 11 33 8 L34 15 Q24 18 14 15 Z', PAPER) + fl('M12 18 Q24 21 36 18 L37 27 Q24 31 11 27 Z', PAPER) + fl('M9 30 Q24 33 39 30 L40 40 Q24 44 8 40 Z', PAPER),
+  weatherGauge: ln('M5 17 H29 a6 6 0 1 0 -6 -6', 1.8) + ln('M5 25 H36 a5.5 5.5 0 1 1 -5.5 5.5', 1.8) + ln('M9 33 H25', 1.6) + ln('M38 6 l2 4 4 .5 -3 3 .8 4 -3.8 -2 -3.8 2 .8 -4 -3 -3 4 -.5 z', 1).replace('fill="none"', `fill="${BRASS}"`),
+  shoals: fl('M5 39 L11 30 L15 35 L21 26 L28 39 Z', '#8f8a7c') + fl('M27 39 L33 33 L38 39 Z', '#8f8a7c') + sea(43) + ln('M38 4 V20', 1) + fl('M36 20 H40 L41 27 H35 Z', '#5b5045', 1),
+  boardersAway: cutlass(false) + cutlass(true),
+  musketry: fl('M8 37 L37 10 L39 12 L10 39 Z', '#5b5045', 1) + fl('M4 38 L10 33 L15 38 L9 44 Z', '#8a5a2c') + ln('M18 30 L22 34', 1.2) + ln('M40 6 L43 3 M42 9 H46 M37 5 V1', 1.4).replace(INK, RED),
+  steady: fl('M6 29 Q24 13 42 29 Q34 34 24 31.5 Q14 34 6 29 Z', '#2f2a26') + fl('M14 25.5 Q24 9 34 25.5', '#3c3530', 1.1) + ln('M10 31 Q24 37 38 31', 1.1).replace(INK, BRASS),
+  shares: ['36', '32', '28'].map((y) => `<ellipse cx="18" cy="${y}" rx="10" ry="3.4" fill="#d9a83e" stroke="${INK}" stroke-width="1.2"/>`).join('') + `<rect x="8" y="28" width="20" height="8" fill="#d9a83e"/>` + `<ellipse cx="18" cy="28" rx="10" ry="3.4" fill="#e9c060" stroke="${INK}" stroke-width="1.2"/>` + ln('M8 28 V36 M28 28 V36', 1.2) + `<circle cx="34" cy="17" r="8.5" fill="#e9c060" stroke="${INK}" stroke-width="1.3"/>` + ln('M34 12 V22 M29 17 H39', 1.2),
+  pumps: fl('M13 17 H35 L32 41 H16 Z', '#c49a5c') + ln('M13.6 23 H34.4 M15.4 35 H32.6', 1.2) + ln('M13 17 Q24 4 35 17', 1.6) + `<path d="M8 23 q-2 4 0 5 q2 -1 0 -5 Z M40 20 q-2 4 0 5 q2 -1 0 -5 Z M42 31 q-1.6 3 0 4 q1.6 -1 0 -4 Z" fill="#3d6f88" stroke="${INK}" stroke-width=".8"/>`,
+  cutAway: ln('M12 43 L31 9', 2.6).replace(INK, '#7a5228') + fl('M27 9 Q37 4 43 13 Q37 16 33 21 Z', '#9aa0a2') + ln('M6 22 L18 14 M8 30 L16 24', 1.1),
+  triage: fl('M6 31 L33 19 L35.5 24 L8.5 36 Z', '#b9b4aa', 1.1) + ln('M8.5 36 l1.6 1.2 1.2 -2 1.6 1.2 1.2 -2 1.6 1.2 1.2 -2 1.6 1.2 1.2 -2 1.6 1.2 1.2 -2 1.6 1.2 1.2 -2 1.6 1.2 1.2 -2', 0.9) + fl('M33 17 Q41 13 43 20 Q44 27 37 27 Z', '#8a5a2c'),
+  spiritRoom: fl('M14 8 Q9 24 14 40 H34 Q39 24 34 8 Z', '#b07a3e') + ln('M12.3 14 H35.7 M12.3 34 H35.7', 1.8).replace(INK, '#3a3128') + ln('M14 8 H34 M14 40 H34', 1.4) + `<circle cx="24" cy="24" r="2.4" fill="${INK}"/>`,
+  jettison: fl('M14 6 H32 V20 H14 Z', '#c49a5c') + ln('M14 6 L32 20 M32 6 L14 20', 1.1) + ln('M23 24 V30 M23 33 V36', 1.4) + ln('M19 32 L23 37 L27 32', 1.4) + sea(43) + ln('M15 40 l-2 -4 M31 40 l2 -4', 1.1),
+};
+const art = (id) => `<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">${ART[id] || ART.prayers}</svg>`;
+
+// Who gives it: "The captain's order", or the officer at his post by name.
+function whoOf(game, C) {
+  if (C.kind === 'captain') return { short: "The captain's", long: "The captain's own order" };
+  const o = availableOrders(game.state).find((x) => x.id === C.id)?.officer;
+  const role = OFFICER_ROLES[C.who]?.name || 'Officer';
+  return { short: role, long: o?.name ? `${o.name}, ${role.toLowerCase()}` : `The ${role.toLowerCase()}'s order` };
+}
+
+let downAt = 0, host = null, plate = null, opt = {}, structKey = '', sel = null, selAt = 0, hover = null, lastPtr = 'mouse', shown = [], wasOn = false, plateKey = '';
+
+function mountHand(parent, options = {}) {
+  opt = options;
+  host = document.getElementById('hand');
+  if (!host) { host = document.createElement('div'); host.id = 'hand'; parent.appendChild(host); }
+  host.setAttribute('role', 'group'); host.setAttribute('aria-label', 'Special orders');
+  // The plate is its own element, so that on a phone held sideways it can stand clear of the ship.
+  plate = document.getElementById('hand-plate');
+  if (!plate) { plate = document.createElement('div'); plate.id = 'hand-plate'; plate.setAttribute('aria-live', 'polite'); parent.appendChild(plate); }
+  plate.classList.remove('show');
+  host.innerHTML = '';
+  structKey = ''; sel = null; hover = null; shown = []; wasOn = false; plateKey = '';
+  host.classList.remove('on'); document.body.classList.remove('hand-on');
+  if (host._bound) return;
+  host._bound = true;
+  host.addEventListener('pointerdown', (e) => { lastPtr = e.pointerType || 'mouse'; downAt = performance.now(); }, true);
+  host.addEventListener('click', (e) => {
+    const c = e.target.closest('.ocard');
+    if (!c) return;
+    e.stopPropagation();
+    const id = c.dataset.card, ptr = lastPtr, held = downAt ? performance.now() - downAt : 0; lastPtr = 'mouse'; downAt = 0;
+    // A long press with a mouse is a captain training his guns who started on a card: it gives nothing.
+    if (ptr === 'mouse' && held > 600) return;
+    // A finger reads first: one tap raises the card, the next gives the order.
+    if (ptr !== 'mouse' && sel !== id) { sel = id; selAt = performance.now(); plateKey = ''; paint(); return; }
+    give(id, c);
+  });
+  host.addEventListener('mouseover', (e) => { const c = e.target.closest('.ocard'); const id = c?.dataset.card || null; if (id !== hover) { hover = id; plateKey = ''; } });
+  host.addEventListener('mouseleave', () => { hover = null; plateKey = ''; });
+}
+
+// Give an order from the hand (a click, a second tap, a key or the pad): the card rises and is gone.
+function give(id, el = host?.querySelector(`.ocard[data-card="${id}"]`)) {
+  const r = opt.play?.(id);
+  if (!r?.ok) {
+    if (el) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+    return r;
+  }
+  if (el && host) {
+    const b = el.getBoundingClientRect(), ghost = el.cloneNode(true);
+    ghost.classList.add('ocard-ghost'); ghost.classList.remove('sel', 'deal', 'shake'); ghost.removeAttribute('data-card'); ghost.setAttribute('aria-hidden', 'true'); ghost.tabIndex = -1;
+    Object.assign(ghost.style, { left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px` });
+    document.body.appendChild(ghost);
+    setTimeout(() => ghost.remove(), 700);
+  }
+  if (sel === id) sel = null;
+  if (hover === id) hover = null;
+  plateKey = '';
+  return r;
+}
+
+function cardHtml(game, id, i, n, D, fresh) {
+  const C = orderdeck.cardOf(id); if (!C) return '';
+  const who = whoOf(game, C), can = D.strength >= C.cost;
+  return `<button type="button" class="ocard ${C.kind}${can ? ' can' : ' cannot'}${fresh ? ' deal' : ''}${sel === id ? ' sel' : ''}" data-card="${esc(id)}" style="${fan(i, n)};--d:${fresh ? fresh - 1 : 0}" aria-label="${esc(`${C.name}. ${C.desc} Costs ${C.cost} of the crew's strength.`)}">
+    <span class="oc-cost" title="Costs ${C.cost} of the crew's strength">${C.cost}</span>
+    <span class="oc-name">${esc(C.name)}</span>
+    <span class="oc-art">${art(id)}</span>
+    <span class="oc-who">${esc(who.short)}</span>
+    <span class="oc-text">${esc(GIST[id] || C.desc)}</span>
+  </button>`;
+}
+
+// The fan: each card turned a little about a point below the hand, the outer ones lower.
+const fan = (i, n) => { const o = i - (n - 1) / 2; return `--o:${o.toFixed(2)};--dy:${(Math.abs(o) * Math.abs(o) * 5).toFixed(1)}px`; };
+const ring = (cls) => `<svg class="${cls}" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="17" class="rg-bed"/><circle cx="20" cy="20" r="17" class="rg-arc" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg>`;
+
+// Every HUD frame. `fight` says whether a fight is on (the deck dealt, and an enemy engaged).
+function updateHand(game, fight) {
+  if (!host) return;
+  const st = game.state, D = orderdeck.deckState(st);
+  const on = !!(fight && D.on && (D.hand.length || D.next != null));
+  if (on !== wasOn) {
+    wasOn = on;
+    host.classList.toggle('on', on);
+    document.body.classList.toggle('hand-on', on);
+    if (!on) { sel = null; hover = null; shown = []; plateKey = ''; plate?.classList.remove('show'); }
+  }
+  if (!on) return;
+  // An unread raised card sinks back after a while.
+  if (sel && (performance.now() - selAt > 7000 || !D.hand.includes(sel))) { sel = null; plateKey = ''; }
+  const waiting = D.next != null;
+  const sk = `${D.hand.join(',')}|${waiting ? 1 : 0}|${D.max}`;
+  if (sk !== structKey) {
+    structKey = sk;
+    const n = D.hand.length + (waiting ? 1 : 0);
+    let fresh = 0;
+    const cards = D.hand.map((id, i) => cardHtml(game, id, i, n, D, shown.includes(id) ? 0 : ++fresh)).join('');
+    shown = [...D.hand];
+    host.innerHTML = `<div class="hand-strength" title="The crew's strength for special orders: how many there are and how cheerful. A point comes back every forty-five seconds of a fight.">${ring('hs-ring')}<b class="hs-n">${D.strength}</b><small class="hs-of">of ${D.max}</small><span class="hs-l">Strength</span></div>
+      <div class="hand-cards">${cards}${waiting ? `<div class="ocard-slot" style="${fan(D.hand.length, n)}" title="The officers are getting the next order ready"><span class="os-dial">${ring('os-ring')}<b class="os-s"></b></span><span class="os-l">Next order</span></div>` : ''}</div>`;
+    plateKey = '';
+  }
+  paint(game);
+}
+
+// What changes without the cards changing: what can be afforded, which card is raised, the
+// strength coming back, the next card's countdown, and the plate.
+function paint(game = opt.game?.()) {
+  if (!host || !game) return;
+  const st = game.state, D = orderdeck.deckState(st);
+  for (const c of host.querySelectorAll('.ocard')) {
+    const C = orderdeck.cardOf(c.dataset.card); if (!C) continue;
+    const can = D.strength >= C.cost;
+    c.classList.toggle('can', can); c.classList.toggle('cannot', !can);
+    c.classList.toggle('sel', sel === c.dataset.card);
+  }
+  host.classList.toggle('raised', !!sel);
+  const n = host.querySelector('.hs-n'); if (n && n.textContent !== String(D.strength)) { n.textContent = String(D.strength); n.parentElement.classList.remove('pulse'); void n.offsetWidth; n.parentElement.classList.add('pulse'); }
+  const of = host.querySelector('.hs-of'); if (of) of.textContent = `of ${D.max}`;
+  const ra = host.querySelector('.hs-ring .rg-arc'); if (ra) ra.setAttribute('stroke-dashoffset', String(D.strength >= D.max ? 0 : Math.round(100 - ((D.regen || 0) / 45) * 100)));
+  host.querySelector('.hand-strength')?.classList.toggle('full', D.strength >= D.max);
+  if (D.next != null) {
+    const left = Math.max(0, D.next - (st.time || 0));
+    const s = host.querySelector('.os-s'); if (s) { const t = `${Math.ceil(left)}`; if (s.textContent !== t) s.textContent = t; }
+    const a = host.querySelector('.os-ring .rg-arc'); if (a) a.setAttribute('stroke-dashoffset', String(Math.round((left / 20) * 100)));
+  }
+  // The plate: the whole of the order under the pointer, or the card raised by a finger.
+  const id = sel || hover;
+  const C = id && orderdeck.cardOf(id);
+  const can = C && D.strength >= C.cost;
+  const pk = C ? `${id}|${can ? 1 : 0}|${sel ? 1 : 0}|${D.strength}` : '';
+  if (pk === plateKey) return;
+  plateKey = pk;
+  if (!plate) return;
+  if (!C) { plate.classList.remove('show'); return; }
+  const who = whoOf(game, C);
+  const how = !can ? `The crew have not the strength: ${C.cost} needed, ${D.strength} left.` : sel ? 'Tap the card again to give the order.' : `Click to give the order${opt.touch ? '' : `, or Shift+${D.hand.indexOf(id) + 1}`}.`;
+  plate.innerHTML = `<b>${esc(C.name)}</b><i>${esc(who.long)} · costs ${C.cost}</i><span>${esc(C.desc)}</span><em class="${can ? '' : 'no'}">${esc(how)}</em>`;
+  plate.classList.add('show');
+}
+
+return { GIST, ART, mountHand, give, updateHand };
 })();
 
 // ---- src/core/port.js ----
@@ -55188,7 +55524,7 @@ const safe = (f) => (g, c) => { try { return !!f(g, c); } catch { return false; 
 
 const HINTS = [
   { id: 'deck', guide: 'deck', title: 'The order deck', when: (g) => sea(g) && orderdeck.deckState(g.state).on && orderdeck.deckState(g.state).hand.length > 0,
-    text: () => `Three special orders are dealt for this fight, on the HUD. Each costs the crew's strength (the pips); a card played is replaced after twenty seconds. Play one with ${kl('cards')} or a click.` },
+    text: () => `Three special orders are dealt for this fight: the cards along the bottom of the screen. Each costs some of the crew's strength (the red seal; the medallion beside them is what the crew have left). A card given is replaced twenty seconds later. Give one with ${kl('cards')}.` },
   { id: 'shot', guide: 'shot', title: 'Shot and stations', when: (g) => sea(g) && inCombat(g),
     text: () => `Chain shot tears her sails so she cannot run; grape clears her deck before you board; round smashes her hull. Change shot with ${kl('shotCycle')}. ${kl('stations')} sends the hands to the guns, the pumps or the sails.` },
   { id: 'passage', guide: 'autopilot', title: 'A long passage', when: (g) => sea(g) && !inCombat(g) && g.state.waypoint && !g.state.autopilot && Math.hypot(g.state.waypoint.x - g.player.x, g.state.waypoint.y - g.player.y) > 2500,
@@ -55360,6 +55696,7 @@ const berthsMod = __m_src_core_berths_js;
 const shiphist = __m_src_core_shiphistory_js;
 const kitMod = __m_src_core_kit_js;
 const orderdeck = __m_src_core_orderdeck_js;
+const orderhand = __m_src_ui_orderhand_js;
 const { FIGUREHEADS } = __m_src_data_anatomy_js;
 const { BUILDS, BELT, BELT_IDS, COMBOS } = __m_src_data_kit_js;
 const { BOARDING_TACTICS } = __m_src_core_combat_js;
@@ -55547,7 +55884,7 @@ const keyName = (k) => ({ ' ': 'Space', arrowup: '↑', arrowdown: '↓', arrowl
 const TOUCH_LABELS = { sailUp: 'Sail+', sailDown: 'Sail−', left: '◀', right: '▶', firePort: 'Fire◀', fireStarboard: 'Fire▶', interact: 'the prompt', board: 'Board', raid: '⚔ Raid',
   chart: 'Chart', captain: '📖 Captain (☰)', help: '❔ How things work (☰)', strike: 'Strike colours (☰)', jettison: '📦 Hold (☰)', autopilot: '🧭 Follow the course (☰)', hasten: '⏩',
   safeMode: '🛡', report: '🛠 Repairs (☰)', glass: '🔭 Spyglass (☰)', ship: '⚓ Ship', aboard: '🔔 Life aboard (☰)', quests: '📜 Quests (☰)', log: '✒ Log (☰)', sing: '♪ Sing',
-  crew: 'Crew', stations: 'Stations (☰)', fleetOrder: 'the fleet order on the HUD', shotCycle: 'the shot button', dig: 'Dig', escape: 'Back', cards: 'the order cards on the HUD', belt: 'the belt on the HUD' };
+  crew: 'Crew', stations: 'Stations (☰)', fleetOrder: 'the fleet order on the HUD', shotCycle: 'the shot button', dig: 'Dig', escape: 'Back', cards: 'a tap on a card, and a second tap', belt: 'the belt on the HUD' };
 const PAD_LABELS = { sailUp: 'RB', sailDown: 'LB', left: 'the left stick', right: 'the left stick', firePort: 'LT', fireStarboard: 'RT', interact: 'Ⓐ', board: 'Ⓧ', chart: 'Ⓨ',
   escape: 'Ⓑ', quests: 'D-pad ▲', ship: 'D-pad ▼', cards: 'D-pad ◀ ▲ ▶ (in a fight)', shotCycle: 'D-pad ▼ (in a fight)', hasten: 'L3', autopilot: 'R3', help: 'Select, then ❔',
   captain: 'Select, then 📖', aboard: 'Select, then 🔔', glass: 'Select, then 🔭', log: 'Select, then ✒', report: 'Select, then 🛠', jettison: 'Select, then 📦', raid: 'Select, then ⚔ Raid', strike: 'Select, then 🏳' };
@@ -55722,7 +56059,7 @@ function pollGamepad() {
   const D = orderdeck.deckState(game.state), fight = !!D.on;
   if (fight) {
     const k = e.left ? 0 : e.up ? 1 : e.right ? 2 : -1;
-    if (k >= 0 && D.hand[k]) playCardUi(D.hand[k]);
+    if (k >= 0 && D.hand[k]) orderhand.give(D.hand[k]);
     if (e.down) cycleShot();
   } else {
     if (e.up) { questsScreen(); return null; }
@@ -55826,7 +56163,7 @@ function setScreen(s) {
   const playing = game && !game.practice && !game.state.shore && ['play', 'port', 'base', 'boarding', 'boarded', 'deck', 'duel', 'crew', 'choice', 'map', 'sheet', 'pause', 'popup', 'help', 'settings'].includes(s);
   $('#hud').classList.toggle('hidden', !playing);
   $('#touch').classList.toggle('hidden', !(playing && isTouch && s === 'play'));
-  if (s !== 'play') { $('#prompt').classList.add('hidden'); togglePhoneSheet(false); }
+  if (s !== 'play') { $('#prompt').classList.add('hidden'); togglePhoneSheet(false); if (game) orderhand.updateHand(game, false); }
   if (s === 'play') show('');
 }
 
@@ -58640,6 +58977,7 @@ function buildHud() {
     <div class="hud-keys">${isTouch ? '' : `<kbd>${keyName(keyOf('sailUp'))}</kbd>/<kbd>${keyName(keyOf('sailDown'))}</kbd> sails · <kbd>${keyName(keyOf('left'))}</kbd>/<kbd>${keyName(keyOf('right'))}</kbd> steer · <kbd>${keyName(keyOf('firePort'))}</kbd>/<kbd>${keyName(keyOf('fireStarboard'))}</kbd> fire · <kbd>${keyName(keyOf('interact'))}</kbd> interact · <kbd>${keyName(keyOf('board'))}</kbd> board · <kbd>${keyName(keyOf('raid'))}</kbd> raid · <kbd>${keyName(keyOf('chart'))}</kbd> chart · <kbd>${keyName(keyOf('captain'))}</kbd> captain · <kbd>${keyName(keyOf('crew'))}</kbd> crew · <kbd>1</kbd>–<kbd>4</kbd> shot · <kbd>${keyName(keyOf('stations'))}</kbd> stations · <kbd>Esc</kbd> menu · <kbd>${keyName(keyOf('help'))}</kbd> how things work · scroll to zoom`}</div>`;
   const skip = document.getElementById('h-tut-skip');
   if (skip) skip.addEventListener('click', () => { if (game) { tutorial.skipTutorial(game); toast(`Tutorial skipped. How things work (${kl('help')}) has the rest whenever you need it.`, 'info'); } });
+  orderhand.mountHand(document.body, { play: (id) => playCardUi(id), touch: isTouch, game: () => game });
   if (isTouch) {
     $('#touch').innerHTML = `
       <button data-t="left" class="steer" style="left:14px;bottom:14px">◀</button><button data-t="right" class="steer" style="left:96px;bottom:14px">▶</button>
@@ -58817,8 +59155,8 @@ function updateHud() {
   { const safe = st.safeMode !== false; set('h-safe', safe ? '🛡 Safe mode' : '⚠ Safe mode off'); document.getElementById('h-safe')?.classList.toggle('unsafe', !safe); set('t-safe', safe ? '🛡' : '⚠'); document.getElementById('t-safe')?.classList.toggle('unsafe', !safe); }
   { const hb = document.getElementById('h-hasten'); if (hb) { const on = !!game.state.hasten; hb.textContent = on ? `⏩ ×${game.state.hasten} (stop)` : '⏩ Hasten'; hb.classList.toggle('on', on); } const th = document.getElementById('t-hasten'); if (th) th.classList.toggle('on', !!game.state.hasten); }
   set('h-stn', `⚓ ${damage.STATIONS[st.stations || 'balanced'].name}`);
-  // Officers' orders (F2), while a fight is on.
-  { const box = document.getElementById('h-orders'); if (box) { const D = orderdeck.deckState(st), fight = director.inCombat(game) && D.on; const hand = fight ? D.hand : []; const key = fight ? `${hand.join(',')}|${D.strength}/${D.max}` : ''; if (box.dataset.k !== key) { box.dataset.k = key; box.innerHTML = fight ? `<span class="order-pips" title="The crew's strength for special orders: it comes back slowly in a fight">${'●'.repeat(D.strength)}${'○'.repeat(Math.max(0, D.max - D.strength))}</span>${hand.map((id, n) => { const C = orderdeck.cardOf(id); if (!C) return ''; return `<button class="link order card-order${D.strength < C.cost ? ' dim' : ''}" data-card="${id}" title="${esc(`${C.desc} Costs ${C.cost} strength. (Shift+${n + 1})`)}">⚑ ${esc(C.name)} <small>${'●'.repeat(C.cost)}</small></button>`; }).join('')}` : ''; box.querySelectorAll('[data-card]').forEach((b) => b.addEventListener('click', () => playCardUi(b.dataset.card))); } } }
+  // The special orders (SEA-2): the hand of cards along the bottom of the screen in a fight (3.5.2).
+  orderhand.updateHand(game, screen === 'play' && director.inCombat(game));
   { const lb = document.getElementById('h-lights'); if (lb) { const show = st.lightsOut || daytime.darkness(st) > 0.3; const t = !show ? '' : st.lightsOut ? '🌑 Dark' : '🏮 Lights'; if (lb.textContent !== t) { lb.textContent = t; lb.style.display = show ? '' : 'none'; } } } // LIFE-3: only after dusk
   { const box = document.getElementById('h-raid'); if (box) { const fs = fleet.fireshipReady(game), cut = st.mode === 'sea' && daytime.darkness(st) > 0.55 ? assaultsMod.cuttingOutTargets(game)[0] : null; const cove = smugglingMod.nearCove(game); const ins = st.mode === 'sea' ? (st.shipPolicies || []).find((x) => x.until >= st.day && game.shipById(x.shipId)?.role === 'escort') : null; const key = `${fs?.id ?? ''}|${cut?.id ?? ''}|${cove ? 1 : 0}|${ins?.shipId ?? ''}`; if (box.dataset.k !== key) { box.dataset.k = key; box.innerHTML = `${ins ? `<button class="link order" id="h-scuttle" data-ship="${ins.shipId}" title="Bring her people across and hole her, and claim on the underwriters. If anyone sees, or anyone talks...">⚓ Arrange the loss of the ${esc(ins.name)}</button>` : ''}${cove ? '<button class="link order" id="h-signal" title="Two lanterns up the shrouds, one above the other">🏮🏮 Show the signal</button>' : ''}${fs ? `<button class="link order" id="h-fireship" title="Send the fireship down on the nearest enemy, or the one you last fired on">🔥 Send the ${esc(fs.name)}</button>` : ''}${cut ? `<button class="link order" id="h-cutout" data-cut="${cut.id}" title="Take the boats in, on muffled oars, and cut her out from under the guns">⛵ Cut out the ${esc(cut.name)}</button>` : ''}`; document.getElementById('h-scuttle')?.addEventListener('click', (e) => { const btn = e.currentTarget; if (!btn.dataset.sure) { btn.dataset.sure = '1'; btn.textContent = 'Are you sure? Click again to hole her'; return; } const r = houseMod2.scuttleForInsurance(game, +btn.dataset.ship); toast(r.ok ? r.text : r.err, r.ok ? 'warn' : 'bad'); }); document.getElementById('h-signal')?.addEventListener('click', () => { const r = smugglingMod.showSignal(game); if (!r.ok) toast(r.err, 'warn'); else drainEvents(); }); document.getElementById('h-fireship')?.addEventListener('click', () => { const r = fleet.sendFireship(game); if (!r.ok) toast(r.err, 'warn'); }); document.getElementById('h-cutout')?.addEventListener('click', (e) => { const r = game.cutOut(+e.currentTarget.dataset.cut); if (!r.ok) toast(r.err, 'warn'); else drainEvents(); }); } } }
   { const box = document.getElementById('h-belt'); if (box) { const B = kitMod.belt(st), ids = BELT_IDS.filter((id) => B[id] > 0); const key = director.inCombat(game) || ids.length ? ids.map((id) => `${id}${B[id]}`).join(',') : ''; if (box.dataset.k !== key) { box.dataset.k = key; box.innerHTML = ids.map((id) => `<button class="link belt" data-belt="${id}" title="${esc(`${BELT[id].desc} (${BELT[id].key})`)}">${esc(BELT[id].name.replace(/^A (cask of rum.*|doctor's kit)$/, (m) => (m.includes('rum') ? 'Rum cask' : "Doctor's kit")))} ×${B[id]}</button>`).join(''); box.querySelectorAll('[data-belt]').forEach((b) => b.addEventListener('click', () => useBeltUi(b.dataset.belt))); } } }
@@ -60349,7 +60687,7 @@ function setShotUi(type) {
   if (!game || !type) return;
   if (game.setShot(type)) { toast(`${damage.SHOT_TYPES[type].name}: ${damage.SHOT_TYPES[type].desc} The guns are drawn and reloaded.`, 'info'); sfx.click?.(); }
 }
-function playCardUi(id) { const r = game.playCard(id); if (!r.ok) toast(r.err, 'warn'); else sfx.bell?.(); }
+function playCardUi(id) { const r = game.playCard(id); if (!r.ok) toast(r.err, 'warn'); else sfx.bell?.(); return r; }
 function useBeltUi(id) { if (!(kitMod.belt(game.state)[id] > 0)) return toast(`You carry no ${BELT[id].name.toLowerCase().replace(/^an? /, '')}. A chandler sells them.`, 'warn'); const r = game.useBelt(id); if (!r.ok) toast(r.err, 'warn'); }
 function cycleShot() { const p = game?.player; if (!p) return; const i = SHOT_IDS.indexOf(p.shot || 'round'); setShotUi(SHOT_IDS[(i + 1) % SHOT_IDS.length]); }
 function cycleStations() {
@@ -61211,7 +61549,7 @@ window.addEventListener('keydown', (e) => {
   if (a === 'sailDown' || k === 'arrowdown') { sailLevel = Math.max(0, sailLevel - 0.5); e.preventDefault(); }
   if (a === 'firePort' && !e.repeat) startAim('port');
   if (a === 'fireStarboard' && !e.repeat) startAim('starboard');
-  if (e.shiftKey && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) { const id = orderdeck.deckState(game.state).hand[+e.code.slice(5) - 1]; if (id) { e.preventDefault(); return playCardUi(id); } }
+  if (e.shiftKey && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) { const id = orderdeck.deckState(game.state).hand[+e.code.slice(5) - 1]; if (id) { e.preventDefault(); return orderhand.give(id); } }
   if (['1', '2', '3', '4'].includes(k)) setShotUi(SHOT_IDS[+k - 1]);
   { const bid = BELT_IDS.find((id) => BELT[id].key === k); if (bid && !e.repeat) useBeltUi(bid); }
   if (a === 'shotCycle') cycleShot();

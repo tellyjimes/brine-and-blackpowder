@@ -844,6 +844,20 @@ body.touch .hud-nav { display: none; }
 .cutaway .cw-act text { font: italic 9.6px var(--body, serif); fill: #2a1b0e; paint-order: stroke; stroke: rgba(243,230,196,.85); stroke-width: 2.4px; }
 .cutaway .cw-act.more text { font-style: normal; font-weight: bold; }
 .cutaway .cw-bub { cursor: pointer; }
+/* 3.5: the ship's other company in the cutaway; a hand's thoughts on his page */
+.cutaway .cw-beast { cursor: pointer; }
+.cutaway .cw-beast:hover path:first-child, .cutaway .cw-beast:focus path:first-child { stroke: #b0422a; stroke-width: 0.8; }
+.mind { margin: 6px 0 8px; }
+.mind h4 { margin: 4px 0 2px; }
+.mind .thoughts { list-style: none; margin: 0 0 6px; padding: 0; }
+.mind .thoughts li { font-style: italic; padding: 2px 0 2px 10px; border-left: 3px solid var(--warn); margin: 2px 0; }
+.mind .thoughts li.good { border-left-color: var(--good); }
+.mind .thoughts li.bad { border-left-color: var(--bad); }
+.mind .thoughts li small { font-style: normal; }
+.talk-line { margin: 4px 0; }
+.mind-acts { gap: 6px; margin-top: 4px; }
+.mind-acts select { max-width: 100%; }
+.crew-table td.mess-cell { white-space: nowrap; font-size: 12px; }
 .cutaway .cw-bub-in { animation: cw-bob 1.6s ease-in-out infinite; }
 .cutaway .cw-bub-t { font: bold 9px var(--display, serif); fill: #a8321f; }
 .cutaway .cw-bub:hover path { fill: #ffe9a8; }
@@ -5739,9 +5753,9 @@ function woundPerson(game, p, cause = 'battle') {
   const id = cause === 'plague' ? null : rollInjury(game, p);
   p.status = 'sick'; p.shipId = null;
   p.stress = clamp(p.stress + 15, 0, 100);
-  if (!id) { p.injury = { name: 'Fever', severity: 'serious', days: rng.int(4, 9) }; return; }
+  if (!id) { p.injury = { name: 'Fever', severity: 'serious', days: rng.int(4, 9) }; game.happen?.({ kind: 'wounded', who: p.id, wound: 'fever' }); return; }
   const inj = INJURIES[id];
-  if (inj.severity !== 'grave') { p.injury = { id, name: inj.name, severity: inj.severity, days: rng.int(...inj.days) }; return; }
+  if (inj.severity !== 'grave') { p.injury = { id, name: inj.name, severity: inj.severity, days: rng.int(...inj.days) }; game.happen?.({ kind: 'wounded', who: p.id, wound: inj.name }); return; }
   // Grave wounds: amputation (or the loss of an eye), or death.
   const L = game.fx.surgeon || 0;
   const carpenter = (st.officers || []).some((o) => o.role === 'boatswain') || aboard(st).some((q) => q.station === 'carpenter');
@@ -5759,6 +5773,7 @@ function woundPerson(game, p, cause = 'battle') {
   const lives = rng.chance(survive);
   p.injury = { id, name: inj.name, severity: 'grave', days: lives ? rng.int(10, 20) : rng.int(1, 3), fatal: !lives, limb: inj.limb, by: L ? 'surgeon' : carpenter ? 'carpenter' : null };
   (game._maimed ||= []).push(p);
+  if (lives) game.happen?.({ kind: 'wounded', who: p.id, wound: inj.name }); // 3.5
 }
 
 // A named hurt from a scene (owner's note: "If I give a dozen lashes... have it give the crew member
@@ -5803,6 +5818,7 @@ function sickbayDaily(game) {
     if (inj.limb) {
       const m = MAIMS[inj.limb];
       p.maims.push(inj.limb);
+      game.happen?.({ kind: 'maimed', who: p.id, limb: { leg: 'peg leg', arm: 'hook', eye: 'blind eye' }[inj.limb] || 'stump' }); // 3.5
       if (inj.limb === 'leg' && p.station === 'topman') p.station = 'cook';
       if (!p.nick && rng.chance(0.6)) p.nick = rng.pick(NICKNAMES[inj.limb]);
       // The articles pay for a lost limb (D3); if not, the crew notices.
@@ -5941,6 +5957,7 @@ function promote(game, personId) {
   p.stress = clamp(p.stress - 20, 0, 100);
   bump(game.state);
   game.msg(`${displayName(p)} is made a ${STATIONS[p.station].name.toLowerCase()} mate.`, 'good');
+  game.happen?.({ kind: 'promoted', who: p.id }); // 3.5
   return { ok: true };
 }
 
@@ -6247,7 +6264,7 @@ function stressDaily(game, { atSea, hungry, unpaid, storm, port } = {}) {
     if (p.cond && port && AFFLICTIONS[p.cond] && rng.chance(0.4)) { events.push({ p, kind: 'recovered', cond: p.cond }); p.cond = null; }
     if (p.stress >= 100 && !p.cond) {
       const virtue = rng.chance(0.22 + lead * 0.015 + (p.rank === 'petty' ? 0.08 : 0));
-      p.cond = virtue ? rng.pick(Object.keys(VIRTUES)) : rng.weighted([['drunk', 3], ['fearful', 3], ['mutinous', SAILOR_TRAITS[p.trait]?.mutinous ? 5 : 2], ['hopeless', 1.5]]);
+      p.cond = virtue ? rng.pick(Object.keys(VIRTUES)) : rng.weighted([['drunk', 3], ['fearful', 3], ['mutinous', (SAILOR_TRAITS[p.trait]?.mutinous ? 5 : 2) + (p.griev?.n || 0) / 25], ['hopeless', 1.5]]);
       p.stress = virtue ? 30 : 60;
       if (virtue && p.cond === 'heroic' && !p.nick) p.nick = rng.pick(NICKNAMES.hero);
       events.push({ p, kind: virtue ? 'virtue' : 'affliction', cond: p.cond });
@@ -6872,7 +6889,7 @@ function dropOverflow(state) {
   const flag = state.ships.find((s) => s.id === state.playerShipId);
   let over = -cargoFree(state);
   const lost = {};
-  for (const g of Object.keys(flag.cargo).sort((a, b) => GOODS[a].base - GOODS[b].base)) {
+  for (const g of Object.keys(flag.cargo).sort((a, b) => (GOODS[a]?.base ?? 0) - (GOODS[b]?.base ?? 0))) { // 3.5: cargo that is not a trade good goes first
     if (over <= 0) break;
     const d = Math.min(flag.cargo[g], over);
     flag.cargo[g] -= d; over -= d; lost[g] = d;
@@ -10107,6 +10124,7 @@ function sharePlunder(game, amount, how = 'articles') {
     st.promise = null;
   }
   const toCrew = Math.round(amount * cut);
+  game.happen?.({ kind: 'share', how }); // 3.5: what the hands make of it
   if (how === 'privilege') { shift(game, 'greed', 6, 'Kept the plunder for yourself'); shift(game, 'loyalty', -3); } else if (how === 'generous') { shift(game, 'greed', -5, 'Gave the crew a generous share'); shift(game, 'loyalty', 3); }
   st.gold -= toCrew;
   st.paidInShares = (st.paidInShares || 0) + toCrew;
@@ -15655,6 +15673,7 @@ function bondsDaily(game) {
       let wf = 1, we = 0.25;
       if (a.home === b.home) wf += 1.5;
       if (a.station === b.station) wf += 1;
+      if (a.mess && a.mess === b.mess) wf += 1.5; // 3.5: messmates
       if ((a.battles || 0) >= 2 && (b.battles || 0) >= 2) wf += 1;
       if (a.trait === 'musician' || b.trait === 'musician') wf += 0.5;
       for (const p of [a, b]) { if (p.trait === 'troublemaker') we += 0.6; if (p.trait === 'greedy') we += 0.3; if (p.trait === 'brawler') we += 0.3; if (p.trait === 'drinker') we += 0.2; }
@@ -15777,14 +15796,14 @@ const ACTIVITIES = {
 // What a sailor wants from his life at sea. Each kind is met (and he is content for a while) or goes
 // unmet; long unmet, he comes to the captain with it.
 const SAILOR_WANTS = {
-  rated:   { name: 'To be rated able seaman', ask: '"I can hand, reef and steer as well as any man aboard, captain. I\'d like to be rated able."', met: 'is rated able at last' },
-  mate:    { name: 'To be made a petty officer', ask: '"I\'ve served my time. I know the work. I\'d make a good mate, captain, if you\'d give me the chance."', met: 'has his rate as a mate' },
-  station: { name: 'A place at {station}', ask: '"Begging your pardon, captain: I\'d sooner be at {station}. It\'s what I\'m good for."', met: 'has the place he wanted' },
-  home:    { name: 'To be paid off at {home}, where family waits', ask: '"When we touch at {home}, captain, I\'d like to be paid off. My sister keeps a chandlery there, and her man is dead."', met: 'went ashore at {home}' },
-  prize:   { name: 'A share of a rich prize', ask: '"When do we take a fat one, captain? Some of us signed for prize money, not salt pork."', met: 'had his share of a rich prize' },
-  learn:   { name: 'To learn to read and to navigate', ask: '"I want to learn my letters, captain, and the quadrant. A man who can navigate can be a master one day."', met: 'can read and take a sight' },
-  revenge: { name: 'To see {friend}\'s death paid for', ask: '"They killed {friend}, captain. I want to be there when we pay them back."', met: 'saw {friend} paid for' },
-  quiet:   { name: 'One last voyage, then a quiet berth', ask: '"This is my last voyage, captain. My knees are gone. Put me ashore with a little something and I\'ll pray for you."', met: 'went ashore to a quiet berth' },
+  rated:   { name: 'To be rated able seaman', ask: '"I can hand, reef and steer as well as any man aboard, captain. I\'d like to be rated able."', met: 'is rated able at last', thought: 'Rated able at last. Nobody can call me a landsman now.' },
+  mate:    { name: 'To be made a petty officer', ask: '"I\'ve served my time. I know the work. I\'d make a good mate, captain, if you\'d give me the chance."', met: 'has his rate as a mate', thought: "A mate's rate. I earned it." },
+  station: { name: 'A place at {station}', ask: '"Begging your pardon, captain: I\'d sooner be at {station}. It\'s what I\'m good for."', met: 'has the place he wanted', thought: 'At the work I am good for, at last.' },
+  home:    { name: 'To be paid off at {home}, where family waits', ask: '"When we touch at {home}, captain, I\'d like to be paid off. My sister keeps a chandlery there, and her man is dead."', met: 'went ashore at {home}', thought: 'Paid off where my people are.' },
+  prize:   { name: 'A share of a rich prize', ask: '"When do we take a fat one, captain? Some of us signed for prize money, not salt pork."', met: 'had his share of a rich prize', thought: 'A real share of a real prize, in my own hand.' },
+  learn:   { name: 'To learn to read and to navigate', ask: '"I want to learn my letters, captain, and the quadrant. A man who can navigate can be a master one day."', met: 'can read and take a sight', thought: 'I can read my own name, and take the sun at noon.' },
+  revenge: { name: 'To see {friend}\'s death paid for', ask: '"They killed {friend}, captain. I want to be there when we pay them back."', met: 'saw {friend} paid for', thought: 'We paid them back. He can rest now.' },
+  quiet:   { name: 'One last voyage, then a quiet berth', ask: '"This is my last voyage, captain. My knees are gone. Put me ashore with a little something and I\'ll pray for you."', met: 'went ashore to a quiet berth', thought: 'A quiet berth, and my knees thank me.' },
 };
 
 // What an officer wants. Values decide it (story/officers.js VALUES).
@@ -15916,13 +15935,14 @@ function meetWant(game, p, quiet = false) {
   if (!p.want || p.want.met) return;
   p.want.met = game.state.day;
   p.stress = clamp((p.stress || 0) - 15, 0, 100);
+  game.happen?.({ kind: 'wantMet', who: p.id, text: (SAILOR_WANTS[p.want.kind]?.thought || 'I got what I wanted, for once.') }); // 3.5
   if (!quiet) say(game, `${displayName(p)} ${SAILOR_WANTS[p.want.kind]?.met.replace('{home}', game.world.islands[p.want.townId]?.settlement?.name || 'home').replace('{friend}', p.want.friend || 'his friend') || 'is content'}.`);
 }
 
 // ---------- the watches and what everyone is doing ----------
 
 function watchNow(st) { const w = watchAt(hourOf(st)); return { ...w, index: WATCHES.indexOf(w) }; }
-const watchOf = (p) => (p.id % 2 ? 'starboard' : 'larboard');
+const watchOf = (p) => p.watch || (p.id % 2 ? 'starboard' : 'larboard'); // 3.5: the captain can move a man (ties.js)
 // Who is doing what in the present watch, for the picture and the log. Stable through the watch.
 function routine(game, ship = game.player) {
   const st = game.state, W = watchNow(st), L = life(st);
@@ -16672,6 +16692,7 @@ function spliceBrace(game, force = false) {
   if ((p.cargo.rum || 0) > 0) { p.cargo.rum--; if (!p.cargo.rum) delete p.cargo.rum; }
   else { const cost = 10 + Math.ceil(crewOf(game).length / 4); if (st.gold < cost) return { ok: false, err: 'No rum in the hold, and not the gold to buy the purser\'s.' }; st.gold -= cost; }
   L.tot = st.day;
+  game.happen?.({ kind: 'tot' }); // 3.5
   for (const q of crewOf(game)) q.stress = clamp(q.stress - (q.trait === 'drinker' ? 10 : 6), 0, 100);
   p.morale = Math.min(100, p.morale + 4);
   for (const o of officers(st)) if (o.values === 'devout') o.loyalty = clamp(o.loyalty - 1, 0, 100);
@@ -16680,6 +16701,7 @@ function spliceBrace(game, force = false) {
 // A word with one of the hands: what is on his mind, from his life.
 function speak(game, p) {
   const st = game.state, w = p.want, n = displayName(p);
+  game.happen?.({ kind: 'captainWord', who: p.id }); // 3.5
   const friend = bondsOf(st, p.id).map((b) => ({ b, q: personById(st, b.a === p.id ? b.b : b.a) })).find((x) => x.q);
   if (p.grief && st.day - p.grief.day < 10) return `${n} says nothing for a while, then: "${p.grief.for} would have liked this weather."`;
   if (p.debt) return `${n} won't meet your eye. He owes ${displayName(personById(st, p.debt.to)) || 'someone'} money and everybody knows it.`;
@@ -19332,7 +19354,8 @@ const cargoWorth = (p) => Object.entries(p.cargo || {}).filter(([g]) => g !== 'p
 // The ringleader: a man already talking mutiny, a troublemaker, or the hardest case aboard.
 function ringleader(st, p) {
   const crew = aboard(st, p.id);
-  return crew.find((q) => q.cond === 'mutinous') || crew.find((q) => q.trait === 'troublemaker') || crew.slice().sort((a, b) => b.xp - a.xp)[0] || null;
+  const talker = crew.filter((q) => q.griev?.n >= 35).sort((a, b) => (b.told || 0) - (a.told || 0) || b.griev.n - a.griev.n)[0]; // 3.5: who carried the talk
+  return (talker && (talker.told || 0) >= 2 ? talker : null) || crew.find((q) => q.cond === 'mutinous') || crew.find((q) => q.trait === 'troublemaker') || crew.slice().sort((a, b) => b.xp - a.xp)[0] || null;
 }
 function mutinyThreat(game) {
   const st = game.state, p = game.player;
@@ -24200,7 +24223,7 @@ registerChoice('crewVote', (game, optionId, c) => {
       go(c.winner); shiftConfidence(game, -4, 'the captain argued against the vote, and lost'); game.msg?.(`They hear you out, and vote the same way again. Course set for ${game.world.islands[c.dest[c.winner]].settlement.name}.`, 'warn'); return { ok: true };
     }
     if (optionId === 'bribe') { const cost = (c.tally.captain + Math.min(c.tally.prizes, c.tally.haven)) * 2; if (st.gold < cost) { game.msg?.('You have not the gold.', 'warn'); go(c.winner); return { ok: true }; } st.gold -= cost; if (game.player) game.player.morale = clamp(game.player.morale + 3, 0, 100); game.msg?.('A double tot, a little silver, and a second count: the captain\'s course carries it.', 'info'); return { ok: true }; }
-    if (optionId === 'overrule') { shiftConfidence(game, -12, 'the captain overruled the company\'s vote'); for (const p of aboard(st)) p.stress = clamp((p.stress || 0) + 5, 0, 100); game.msg?.('"The captain commands," you say. Nobody answers. It is very quiet in the waist.', 'warn'); return { ok: true }; }
+    if (optionId === 'overrule') { game.happen?.({ kind: 'overruled' }); shiftConfidence(game, -12, 'the captain overruled the company\'s vote'); for (const p of aboard(st)) p.stress = clamp((p.stress || 0) + 5, 0, 100); game.msg?.('"The captain commands," you say. Nobody answers. It is very quiet in the waist.', 'warn'); return { ok: true }; }
   }
   if (c.issue === 'wounded') {
     if (optionId === 'abide') { if (c.winner === 'pay') { st.gold = Math.max(0, st.gold - c.amount); shiftConfidence(game, 6, 'the wounded were paid as the company voted'); game.msg?.(`${c.amount} gold from the captain's share to the wounded and the dead men's messmates, as the company voted.`, 'good'); } else shiftConfidence(game, 2); return { ok: true }; }
@@ -26244,6 +26267,8 @@ const STEPS = [
   { id: 'dock', text: 'Sail to the nearest port (a coloured dot on the minimap). Slow down with {k:sailDown} and press {k:interact} to dock.', touch: 'Sail to the nearest port (a coloured dot on the minimap). Slow down with Sail− and tap the prompt that appears to dock.' },
   { id: 'buy', text: 'In the Market, buy some provisions. Your crew eats every day.' },
   { id: 'leave', text: 'Weigh anchor ({k:escape}, or the button at the foot of the port) and put back out to sea.', touch: 'Tap Weigh anchor, at the foot of the port, and put back out to sea.' },
+  // 3.5: the crew are people with things on their minds; the first voyage shows one of them.
+  { id: 'crew', text: 'Look at a man: open Life aboard ({k:aboard}) and click one of the hands to see what is on his mind, and who he messes with.', touch: 'Look at a man: open Life aboard (in the ☰ sheet) and tap one of the hands to see what is on his mind, and who he messes with.' },
   { id: 'guns', text: 'Gunnery practice: an abandoned hulk is drifting nearby. Put her on your beam (the gold arcs) and fire with {k:firePort} or {k:fireStarboard}. Hit her twice.' },
   { id: 'board', text: 'Her skeleton crew has struck. Come alongside, slow down and press {k:board} to board.' },
   // FEEL-4: the first voyage goes on to a smuggling run and a landing.
@@ -26343,6 +26368,7 @@ function tutorialUpdate(game, dt) {
   else if (step === 'dock') ok = st.mode === 'port';
   else if (step === 'buy') ok = t.flags.buy === 'provisions';
   else if (step === 'leave') ok = st.mode === 'sea';
+  else if (step === 'crew') ok = !!t.flags['look-man'];
   else if (step === 'guns') {
     const hulk = game.shipById(t.flags.hulkId);
     if (!hulk || hulk.sunk) { if (!hulk) spawnHulk(game); else ok = true; }
@@ -29632,6 +29658,7 @@ function verdict(game, a, v) {
   else if (fit < -1) { conf -= 3; }
   if (harsh >= 3) { st.repute = st.repute || { mercy: 0 }; st.repute.mercy = clamp(st.repute.mercy - (harsh === 4 ? 8 : 3), -100, 100); }
   if (harsh === 0) { st.repute = st.repute || { mercy: 0 }; st.repute.mercy = clamp(st.repute.mercy + 2, -100, 100); }
+  if (p && (v === 'flog' || v === 'fine' || v === 'forgive')) game.happen?.({ kind: v, who: p.id, unjust: !g && harsh >= 2 }); // 3.5: what he and his mess make of it
   if (p) {
     // A flogging lays a man's back open: he is on the sick list for days (owner's note, 2.1.1).
     if (v === 'flog') { p.stress = clamp((p.stress || 0) + 25, 0, 100); hurtPerson(game, p, { wound: 'Flogged: back laid open', days: [4, 8], severity: 'serious', stress: 0 }); game.player.crew = Math.max(1, game.player.crew); }
@@ -42396,6 +42423,887 @@ registerChoice('firstMate', (game, optionId) => {
 return { FIRST_MATE_FROM, canOffer, firstMateDaily };
 })();
 
+// ---- src/core/ties.js ----
+const __m_src_core_ties_js = (() => {
+// Ties (3.5, the shared foundations): who is bound to whom aboard, and how strongly. The one place to
+// ask. Friendships, feuds and lovers stay where they have always been (crewlife.js keeps them as
+// bonds); a hand's mess (messes.js) and his watch are ties too. Grievance travels along these, and
+// later releases add kin, owners and old shipmates.
+//
+//   { id, kind: 'friend' | 'lovers' | 'feud' | 'mess' | 'watch', w }   (w: how much he listens)
+
+const { aboard, personById } = __m_src_core_crew_js;
+const { bondsOf } = __m_src_core_crewlife_js;
+// A hand stands the larboard or the starboard watch. The captain can move him (3.5); otherwise it
+// is the old rule, by his number in the books.
+function watchOf(p) { return p.watch || (p.id % 2 ? 'starboard' : 'larboard'); }
+function otherWatch(p) { return watchOf(p) === 'larboard' ? 'starboard' : 'larboard'; }
+
+function messmatesOf(st, p) {
+  if (!p?.mess) return [];
+  return aboard(st).filter((q) => q.id !== p.id && q.mess === p.mess);
+}
+
+// Everyone aboard he is tied to, strongest first. A messmate who is also a friend counts once, as the
+// stronger tie.
+function tiesOf(st, p, { watch = true } = {}) {
+  if (!p) return [];
+  const out = new Map();
+  const put = (id, kind, w) => { const old = out.get(id); if (!old || old.w < w) out.set(id, { id, kind, w }); };
+  for (const b of bondsOf(st, p.id)) {
+    const id = b.a === p.id ? b.b : b.a, q = personById(st, id);
+    if (!q || q.status !== 'aboard') continue;
+    put(id, b.kind === 'lovers' ? 'lovers' : b.kind, b.kind === 'lovers' ? 1.5 : b.kind === 'friend' ? 1.2 : 0.4);
+  }
+  for (const q of messmatesOf(st, p)) put(q.id, 'mess', 1);
+  if (watch) {
+    const mine = watchOf(p);
+    for (const q of aboard(st, p.shipId)) if (q.id !== p.id && watchOf(q) === mine) put(q.id, 'watch', 0.25);
+  }
+  return [...out.values()].sort((a, b) => b.w - a.w);
+}
+
+return { watchOf, otherWatch, messmatesOf, tiesOf };
+})();
+
+// ---- src/data/thoughts.js ----
+const __m_src_data_thoughts_js = (() => {
+// What a hand has on his mind (3.5, "Thoughts you can read", after RimWorld's thoughts and Dwarf
+// Fortress's memories). Each thought is one line in his own words, held for some days.
+//   t:       the words ({x} another person or a thing, {n} a number, {wound}, {limb}, {rank}, {cat}, {cause})
+//   days:    how long he holds it (personal thoughts) or the crew does (common ones)
+//   v:       how much it weighs on him, bad below zero; it orders what his page shows first
+//   daily:   strain a day while he holds it, for the new effects of 3.5 only. Thoughts about things
+//            that already moved strain before 3.5 (a battle, a flogging, a share) carry none, so the
+//            balance of strain is what it was; they say why it moved.
+//   captain: what it does to how he regards the captain (the grievance system reads it)
+//   lasting: it can change him for good (see LASTING)
+const THOUGHTS = {
+  // ---------- death and wounds ----------
+  friendDied:     { t: '{x} is gone, and his hammock still hangs where it did.', days: 25, v: -8 },
+  messmateDied:   { t: 'We set a place for {x} at the mess without thinking.', days: 12, v: -5, daily: 0.2 },
+  shipmatesLost:  { t: 'We lost {n} good men today.', days: 8, v: -4 },
+  shipmateLost:   { t: 'We lost {x} today.', days: 6, v: -3 },
+  wounded:        { t: 'This {wound} gives me no peace.', days: 12, v: -4 },
+  woundedFriend:  { t: '{x} took a {wound}. The surgeon says he will mend.', days: 6, v: -2 },
+  maimed:         { t: 'A {limb}. What is a sailor with a {limb} good for?', days: 40, v: -10, lasting: true },
+  // ---------- fights ----------
+  won:            { t: 'We took her, and I was there when we did.', days: 6, v: 4 },
+  lost:           { t: 'We ran. Nobody says so, but we ran.', days: 6, v: -4 },
+  firstFight:     { t: 'My first fight. My hands did not stop shaking till the dog watch.', days: 10, v: -1, lasting: true },
+  // ---------- shares and justice ----------
+  shareGenerous:  { t: 'The captain shared it fair, and more than fair.', days: 18, v: 6, captain: 6 },
+  shareArticles:  { t: 'Paid by the articles, to the last real.', days: 5, v: 2, captain: 1 },
+  sharePrivilege: { t: 'The captain took the lion\'s share again.', days: 20, v: -6, captain: -6 },
+  flogged:        { t: 'My back. I will not forget who gave the order.', days: 40, v: -10, captain: -10, lasting: true },
+  floggedMess:    { t: 'They flogged {x} before the whole ship. Our {x}.', days: 14, v: -5, captain: -3 },
+  floggedSaw:     { t: 'A dozen at the gangway for {x}. Order is order.', days: 3, v: -1 },
+  hangedMess:     { t: 'We cut {x} down ourselves.', days: 60, v: -12, captain: -10, lasting: true },
+  hangedSaw:      { t: 'I watched {x} dance at the yardarm.', days: 14, v: -4, captain: -2 },
+  forgiven:       { t: 'The captain let it go. I will not forget that either.', days: 25, v: 6, captain: 8 },
+  fined:          { t: 'My share stopped, and in front of everyone.', days: 10, v: -3, captain: -2 },
+  // ---------- rank and wants ----------
+  promoted:       { t: 'Rated {rank} now. My mother would laugh to see it.', days: 20, v: 6, captain: 4 },
+  messmatePromoted: { t: '{x} made {rank}. One of ours.', days: 8, v: 2 },
+  wantMet:        { t: '{x}', days: 15, v: 5, captain: 2 },
+  captainWord:    { t: 'The captain stopped and asked after me by name.', days: 6, v: 2, captain: 2 },
+  // ---------- the crew together (common thoughts) ----------
+  hungry:         { t: 'Half rations again, and the bread has legs.', days: 2, v: -5 },
+  unpaid:         { t: 'No wages again, and no word why.', days: 3, v: -4, captain: -2 },
+  storm:          { t: 'That blow nearly had us all.', days: 3, v: -3 },
+  longSea:        { t: '{n} days since we saw a town.', days: 2, v: -2 },
+  ashore:         { t: 'Solid ground, a dry bed and a tavern that stays open late.', days: 4, v: 5 },
+  tot:            { t: 'A double tot, and the fiddle going.', days: 2, v: 3, captain: 1 },
+  heldTheWheel:   { t: 'I held her through that, and I will hold her again.', days: 30, v: 5, lasting: true },
+  // ---------- the ship's other company ----------
+  catPet:         { t: '{cat} slept on my chest all through the middle watch.', days: 3, v: 2, daily: -0.5 },
+  catLost:        { t: '{cat} is gone over the side. God help us now.', days: 10, v: -4, daily: 0.3 },
+  rats:           { t: 'Rats in the bread room, bold as officers.', days: 3, v: -2, daily: 0.2 },
+  animalEaten:    { t: 'We ate {x}. I know we had to.', days: 8, v: -3 },
+  // ---------- messes ----------
+  messGood:       { t: 'Good company in our mess.', days: 5, v: 2, daily: -0.3 },
+  messBad:        { t: 'Nobody in my mess will pass me the salt.', days: 5, v: -3, daily: 0.5 },
+  movedWilling:   { t: 'In with {x}\'s lot now. Better.', days: 8, v: 3 },
+  movedUnwilling: { t: 'Shifted to another mess without a by-your-leave.', days: 15, v: -4, captain: -3 },
+  refusedMess:    { t: 'I asked to change mess and was told no.', days: 8, v: -3, captain: -2 },
+  // ---------- talk below (grievance) ----------
+  heard:          { t: '{x} says {cause}. He is not wrong.', days: 6, v: -3, daily: 0.3 },
+  sore:           { t: 'I say {cause}, and I will say it to anyone.', days: 6, v: -4, daily: 0.3 },
+  answered:       { t: 'The captain heard us out. That is something.', days: 10, v: 4, captain: 5 },
+};
+
+// What a grievance is about, in the hands' words ("{x} says ...").
+const CAUSES = {
+  share:    'the shares were short',
+  flogging: 'the floggings have to stop',
+  hanging:  'the captain hangs men for nothing',
+  wages:    'we are owed wages',
+  rations:  'we are starved while the cabin dines',
+  course:   'the captain will not hear the company',
+  moved:    'the captain shifts men about like ballast',
+  sea:      'this voyage will never end',
+};
+
+// A thought that can change a man for good: [thought, from trait (or '*'), to trait, chance, words].
+const LASTING = [
+  ['heldTheWheel', 'nervous', 'steady', 0.35, 'held the wheel through the blow, and the fear went out of him with it'],
+  ['firstFight', 'nervous', 'steady', 0.2, 'came through his first fight, and has been steadier since'],
+  ['flogged', '*', 'troublemaker', 0.2, 'has not been the same since the gangway'],
+  ['hangedMess', 'steady', 'troublemaker', 0.15, 'cut his messmate down from the yardarm, and something in him went with him'],
+  ['maimed', '*', 'drinker', 0.15, 'drinks now, since the surgeon\'s saw'],
+];
+
+// Ship's cats' names, and the other animals a ship might keep.
+const CAT_NAMES = ['Smut', 'Tar', 'Grimalkin', 'Biscuit', 'Old Nick', 'Ballast', 'Jenny', 'Sooty', 'Pitch', 'Skillet', 'Bosun', 'Mouser', 'Tom', 'Plank', 'Mistress Tib', 'Cinders'];
+const ANIMALS = {
+  cat:    { name: 'Ship\'s cat', cost: 0, eats: 0.05, desc: 'Keeps the rats down, and sleeps where she likes.', rats: 3 },
+  dog:    { name: 'A ratting terrier', cost: 20, eats: 0.1, desc: 'Kills rats faster than any cat, and follows the boarders over the rail.', rats: 2.5 },
+  goat:   { name: 'A milch goat', cost: 25, eats: 0.15, desc: 'Milk for the sick: the sick bay mends a little faster. Needs the pen.', sick: 0.1 },
+  hens:   { name: 'A coop of hens', cost: 15, eats: 0.1, desc: 'Eggs for the cabin and the sick. Needs the coops.', sick: 0.05 },
+  parrot: { name: 'A parrot', cost: 40, eats: 0.02, desc: 'Learns the captain\'s curses within a month, and repeats them to governors.' },
+};
+const ANIMAL_NAMES = {
+  dog: ['Nipper', 'Rags', 'Bones', 'Gunner', 'Patch', 'Scrap'],
+  goat: ['Bess', 'Nan', 'Old Meg', 'Moll', 'Biddy'],
+  hens: ['the hens', 'the hens'],
+  parrot: ['Bishop', 'Jacko', 'Polly', 'Admiral', 'Sermon', 'Doubloon'],
+};
+
+return { THOUGHTS, CAUSES, LASTING, CAT_NAMES, ANIMALS, ANIMAL_NAMES };
+})();
+
+// ---- src/core/thoughts.js ----
+const __m_src_core_thoughts_js = (() => {
+// Thoughts you can read (3.5, system 1 of "Bringing the sea to life", after RimWorld's thoughts and
+// Dwarf Fortress's memories). A hand's strain is no longer a bare number: it has reasons, in his own
+// words, each held for its days. Some are his alone (his back laid open, his friend drowned); some the
+// whole crew share (short rations, a double tot). His page shows the heaviest. A few can change him
+// for good. Thoughts about things that moved strain before 3.5 carry no strain of their own, so the
+// balance is what it was; they say why.
+//
+//   p.th:           [{ k, x?, n?, day, until }]          (his own; at most MAX_OWN)
+//   st.fore.common: [{ k, x?, n?, day, until }]          (the crew's; at most MAX_COMMON)
+
+const { THOUGHTS, LASTING } = __m_src_data_thoughts_js;
+const { aboard, displayName } = __m_src_core_crew_js;
+const { SAILOR_TRAITS } = __m_src_data_crew_js;
+const { clamp } = __m_src_core_util_js;
+const MAX_OWN = 8, MAX_COMMON = 6;
+
+function fore(st) { const F = (st.fore ||= {}); F.common ||= []; return F; }
+
+function words(k, e = {}) {
+  const T = THOUGHTS[k];
+  if (!T) return '';
+  return T.t.replace(/\{x\}/g, e.x ?? 'him').replace('{n}', e.n ?? '').replace('{wound}', (e.wound || 'wound').toLowerCase())
+    .replace(/\{limb\}/g, e.limb || 'stump').replace('{rank}', e.rank || 'able').replace('{cat}', e.x || 'The cat').replace('{cause}', e.cause || 'things are wrong');
+}
+
+// He thinks it. The same thought again renews it rather than doubling it. Returns the thought.
+function think(game, p, k, extra = {}) {
+  const T = THOUGHTS[k], st = game.state;
+  if (!T || !p) return null;
+  const th = (p.th ||= []);
+  const days = extra.days ?? T.days;
+  let t = th.find((x) => x.k === k && (x.x ?? null) === (extra.x ?? null));
+  if (t) { t.until = Math.max(t.until, st.day + days); t.day = st.day; if (extra.n != null) t.n = extra.n; }
+  else {
+    t = { k, day: st.day, until: st.day + days };
+    for (const f of ['x', 'n', 'wound', 'limb', 'rank', 'cause', 'from']) if (extra[f] != null) t[f] = extra[f];
+    th.push(t);
+    if (th.length > MAX_OWN) {
+      // He forgets the lightest, oldest thing first.
+      const w = (x) => Math.abs(THOUGHTS[x.k]?.v || 0) * 10 - (st.day - x.day);
+      th.sort((a, b) => w(b) - w(a)); th.length = MAX_OWN;
+    }
+  }
+  if (T.lasting) changeHim(game, p, k);
+  return t;
+}
+// The whole crew think it.
+function thinkAll(game, k, extra = {}) {
+  const st = game.state, T = THOUGHTS[k], C = fore(st).common;
+  if (!T) return null;
+  let t = C.find((x) => x.k === k);
+  if (t) { t.until = st.day + (extra.days ?? T.days); t.day = st.day; if (extra.n != null) t.n = extra.n; if (extra.x != null) t.x = extra.x; }
+  else {
+    t = { k, day: st.day, until: st.day + (extra.days ?? T.days) };
+    if (extra.n != null) t.n = extra.n; if (extra.x != null) t.x = extra.x;
+    C.push(t);
+    if (C.length > MAX_COMMON) C.shift();
+  }
+  return t;
+}
+function forget(p, k) { if (p?.th) p.th = p.th.filter((x) => x.k !== k); }
+function holds(p, k) { return !!p?.th?.some((x) => x.k === k); }
+
+// What weighs on him, heaviest first: his own thoughts and the crew's, as he would say them.
+function thoughtsOf(game, p, n = 3) {
+  const st = game.state;
+  const all = [...(p?.th || []).map((t) => ({ ...t, own: true })), ...fore(st).common.map((t) => ({ ...t, own: false }))]
+    .filter((t) => t.until >= st.day && THOUGHTS[t.k]);
+  all.sort((a, b) => Math.abs(THOUGHTS[b.k].v) - Math.abs(THOUGHTS[a.k].v) || b.day - a.day || (b.own ? 1 : 0) - (a.own ? 1 : 0));
+  return all.slice(0, n).map((t) => ({ k: t.k, text: words(t.k, t), good: THOUGHTS[t.k].v > 0, own: t.own, day: t.day }));
+}
+const thoughtText = (t) => words(t.k, t);
+
+// How he regards the captain, from what he holds in mind: positive is goodwill. The talk below
+// (grievance.js) passes him by when he thinks well of you.
+function regard(st, p) {
+  let r = 0;
+  for (const t of [...(p?.th || []), ...fore(st).common]) if (t.until >= st.day) r += THOUGHTS[t.k]?.captain || 0;
+  return r;
+}
+
+// Once a day: thoughts run out, and the new effects of 3.5 (a good mess, a cat, rats, grief in the
+// mess, the talk below) ease or wear him.
+function thoughtsDaily(game) {
+  const st = game.state, F = fore(st);
+  F.common = F.common.filter((t) => t.until >= st.day);
+  const common = F.common.reduce((a, t) => a + (THOUGHTS[t.k]?.daily || 0), 0);
+  for (const p of aboard(st)) {
+    if (p.th) p.th = p.th.filter((t) => t.until >= st.day);
+    let d = common;
+    for (const t of p.th || []) d += THOUGHTS[t.k]?.daily || 0;
+    if (d) {
+      const m = d > 0 ? (SAILOR_TRAITS[p.trait]?.stress || 1) : 1;
+      p.stress = clamp((p.stress || 0) + d * m, 0, 100);
+    }
+  }
+}
+
+// A thought that can change a man for good (Dwarf Fortress's core memories).
+function changeHim(game, p, k) {
+  const st = game.state, rng = game.rng;
+  for (const [tk, from, to, chance, why] of LASTING) {
+    if (tk !== k || p.trait === to || (from !== '*' && p.trait !== from)) continue;
+    if (p.trait === 'pious' && to === 'troublemaker') continue;
+    if (!rng.chance(chance)) continue;
+    (p.changed ||= []).push({ day: st.day, from: p.trait, to, why });
+    p.trait = to;
+    game.msg?.(`${displayName(p)} ${why}.`, to === 'steady' ? 'good' : 'info');
+    return true;
+  }
+  return false;
+}
+function changesOf(p) { return (p?.changed || []).map((c) => `${c.why} (day ${c.day})`); }
+
+return { MAX_OWN, fore, think, thinkAll, forget, holds, thoughtsOf, thoughtText, regard, thoughtsDaily, changesOf };
+})();
+
+// ---- src/core/messes.js ----
+const __m_src_core_messes_js = (() => {
+// Messes (3.5, system 2). Sailors ate in messes: a dozen or fewer who met at the same place on the
+// berth deck for every meal, chose their messmates, and were equals within the mess (the USS
+// Constitution Museum describes a "12-strong family"; the practice is much older). Here every hand
+// belongs to a mess of four to eight on his own ship. Messmates eat together, stand up for each other
+// and grieve together; a mess has a temper of its own (the Irish mess, the old hands', the dice-players'),
+// and the talk below (grievance.js) travels through messes first. Men choose: a hand can ask to
+// change mess, and a captain who shifts men about without asking pays for it.
+//
+//   st.messes: [{ id, no, shipId, since }]      p.mess: a mess id
+
+const { aboard, personById, displayName } = __m_src_core_crew_js;
+const { bondsOf, bondBetween } = __m_src_core_crewlife_js;
+const { messmatesOf } = __m_src_core_ties_js;
+const { think, regard } = __m_src_core_thoughts_js;
+const { registerMoment, addMoment, momentBusy } = __m_src_core_shipboard_js;
+const { clamp } = __m_src_core_util_js;
+const MESS_MIN = 4, MESS_MAX = 8, MESS_AIM = 6;
+const CULTURE_WORD = { english: 'English', irish: 'Irish', spanish: 'Spanish', dutch: 'Dutch', french: 'French', african: 'African' };
+const TEMPER_WORD = { oldSalt: 'the old hands\' mess', pious: 'the psalm-singers\' mess', greedy: 'the dice-players\' mess', troublemaker: 'the hard cases\' mess', drinker: 'the grog mess', musician: 'the fiddler\'s mess', brawler: 'the bruisers\' mess' };
+
+function messes(st) { return (st.messes ||= []); }
+function messById(st, id) { return messes(st).find((m) => m.id === id) || null; }
+function membersOf(st, m) { return m ? aboard(st).filter((p) => p.mess === m.id) : []; }
+
+// The man his mess listens to: the longest served, the most fights, the oldest.
+function leaderOf(st, m) {
+  const ms = membersOf(st, m);
+  const s = (p) => (p.battles || 0) * 2 + (p.xp || 0) / 10 + (p.age || 25) / 8 + (p.rank === 'petty' ? 6 : 0) + (p.trait === 'oldSalt' ? 4 : 0);
+  return ms.sort((a, b) => s(b) - s(a) || a.id - b.id)[0] || null;
+}
+
+// A mess is named by what it is: its people if most are of one, its temper if half share one, else its
+// leader. Mess numbers are as the purser keeps them.
+function messName(st, m) {
+  const ms = membersOf(st, m);
+  if (!ms.length) return `Mess ${m.no}`;
+  const count = (f) => { const c = {}; for (const p of ms) { const k = f(p); if (k) c[k] = (c[k] || 0) + 1; } return Object.entries(c).sort((a, b) => b[1] - a[1])[0] || [null, 0]; };
+  const [cult, nc] = count((p) => p.culture);
+  if (cult && nc / ms.length >= 0.6 && CULTURE_WORD[cult] && ms.length >= 3) return `the ${CULTURE_WORD[cult]} mess`;
+  const [tr, nt] = count((p) => (TEMPER_WORD[p.trait] ? p.trait : null));
+  if (tr && nt / ms.length >= 0.5 && ms.length >= 3) return TEMPER_WORD[tr];
+  const l = leaderOf(st, m);
+  return l ? `${String(l.name).split(' ')[0]} ${String(l.name).split(' ').slice(-1)[0]}'s mess` : `Mess ${m.no}`;
+}
+function messLabel(st, m) { return m ? `No. ${m.no}, ${messName(st, m)}` : 'no mess'; }
+
+// How well a mess sits together: friends inside it, feuds inside it, and what its men think of you.
+function messMood(st, m) {
+  const ms = membersOf(st, m), ids = new Set(ms.map((p) => p.id));
+  let friends = 0, feuds = 0;
+  for (const p of ms) for (const b of bondsOf(st, p.id)) { const o = b.a === p.id ? b.b : b.a; if (!ids.has(o) || o < p.id) continue; if (b.kind === 'feud') feuds++; else friends++; }
+  const reg = ms.length ? ms.reduce((a, p) => a + regard(st, p), 0) / ms.length : 0;
+  return { n: ms.length, friends, feuds, regard: reg, loyal: reg >= 5 && feuds === 0 };
+}
+
+// Where a new man would sit: with his own people, his friends, and away from his enemies.
+function scoreFor(st, p, m) {
+  const ms = membersOf(st, m);
+  if (ms.length >= MESS_MAX) return -99;
+  let s = (MESS_AIM - ms.length) * 0.4;
+  for (const q of ms) {
+    if (q.culture === p.culture) s += 1;
+    if (q.home && q.home === p.home) s += 1.5;
+    const b = bondBetween(st, p.id, q.id);
+    if (b) s += b.kind === 'feud' ? -6 : 3;
+  }
+  return s;
+}
+function placeInMess(game, p) {
+  const st = game.state;
+  const mine = messes(st).filter((m) => m.shipId === p.shipId);
+  let best = null, bs = -1e9;
+  for (const m of mine) { const s = scoreFor(st, p, m); if (s > bs) { bs = s; best = m; } }
+  if (!best || bs < 0.5 && mine.every((m) => membersOf(st, m).length >= MESS_MIN)) {
+    const no = Math.max(0, ...messes(st).map((m) => m.no)) + 1;
+    best = { id: (st.nextMessId = (st.nextMessId || 0) + 1), no, shipId: p.shipId, since: st.day };
+    messes(st).push(best);
+  }
+  p.mess = best.id;
+  return best;
+}
+
+// Every hand aboard has a mess on his own ship; empty messes are struck from the purser's book.
+function settleMesses(game) {
+  const st = game.state;
+  for (const p of aboard(st)) {
+    const m = p.mess && messById(st, p.mess);
+    if (!m || m.shipId !== p.shipId) { p.mess = null; placeInMess(game, p); }
+  }
+  const used = new Set(aboard(st).map((p) => p.mess));
+  st.messes = messes(st).filter((m) => used.has(m.id));
+}
+
+// The captain moves a man. Asked for, it is welcome; not asked for, it is resented.
+function moveToMess(game, personId, messId, { asked = false } = {}) {
+  const st = game.state, p = personById(st, personId), m = messById(st, messId);
+  if (!p || p.status !== 'aboard') return { ok: false, err: 'He is not aboard.' };
+  if (!m || m.shipId !== p.shipId) return { ok: false, err: 'No such mess in his ship.' };
+  if (p.mess === m.id) return { ok: false, err: 'He messes there already.' };
+  if (membersOf(st, m).length >= MESS_MAX) return { ok: false, err: 'That mess is full.' };
+  p.mess = m.id;
+  const l = leaderOf(st, m);
+  if (asked) think(game, p, 'movedWilling', { x: l && l.id !== p.id ? String(l.name).split(' ')[0] : 'the new' });
+  else { think(game, p, 'movedUnwilling'); game.happen?.({ kind: 'moved', who: p.id }); }
+  return { ok: true, text: `${displayName(p)} takes his plate and his spoon to ${messName(st, m)}.` };
+}
+
+// Once a day: the messes are settled; a man among friends eats easier; a man among enemies does not;
+// and now and then one asks to move.
+function messesDaily(game) {
+  const st = game.state, rng = game.rng;
+  if (!game.player || aboard(st).length < 4) return;
+  settleMesses(game);
+  for (const p of aboard(st)) {
+    const mates = messmatesOf(st, p);
+    const friend = mates.some((q) => { const b = bondBetween(st, p.id, q.id); return b && b.kind !== 'feud'; });
+    const feud = mates.some((q) => bondBetween(st, p.id, q.id)?.kind === 'feud');
+    if (feud) think(game, p, 'messBad');
+    else if (friend && rng.chance(0.3)) think(game, p, 'messGood');
+  }
+}
+
+// A man asks to change mess: he has a feud in his own, or a friend in another.
+registerMoment('mess', {
+  make(game, rng) {
+    const st = game.state;
+    const crew = aboard(st, game.player?.id);
+    const cand = crew.filter((p) => !momentBusy(st, p.id) && p.mess && (!p.messAsked || st.day - p.messAsked >= 12)).map((p) => {
+      const mates = messmatesOf(st, p);
+      const enemy = mates.find((q) => bondBetween(st, p.id, q.id)?.kind === 'feud');
+      const friend = bondsOf(st, p.id).map((b) => personById(st, b.a === p.id ? b.b : b.a)).find((q) => q && q.status === 'aboard' && q.shipId === p.shipId && q.mess !== p.mess && b0(st, p, q));
+      return { p, enemy, friend };
+    }).filter((c) => c.enemy || c.friend);
+    if (!cand.length) return null;
+    const { p, enemy, friend } = rng.pick(cand);
+    const target = friend ? messById(st, friend.mess) : messes(st).filter((m) => m.shipId === p.shipId && m.id !== p.mess && membersOf(st, m).length < MESS_MAX).sort((a, b) => membersOf(st, a).length - membersOf(st, b).length)[0];
+    if (!target || membersOf(st, target).length >= MESS_MAX) return null;
+    p.messAsked = st.day;
+    const first = String(p.name).split(' ')[0];
+    return addMoment(game, 'mess', { who: [p.id], title: 'A man asks to change mess', data: { to: target.id },
+      text: enemy
+        ? `${displayName(p)} wants to change mess. "I cannot eat across the cloth from ${displayName(enemy)} another day, captain. One of us will end with a knife in him." ${messName(st, target)} would have him.`
+        : `${displayName(p)} would like to mess with ${displayName(friend)} in ${messName(st, target)}. "We stood every watch together on the run down, captain. It would be a kindness."`,
+      options: [
+        { id: 'allow', label: `Let ${first} move`, tag: 'ease' },
+        { id: 'refuse', label: 'He stays where he is', tag: 'order' },
+      ] });
+  },
+  def: 'allow', pref: { ruthless: 'refuse', ambitious: 'refuse', honourable: 'allow', comradely: 'allow', devout: 'allow', greedy: 'allow' },
+  resolve(game, m, opt) {
+    const st = game.state, p = personById(st, m.who[0]);
+    if (!p) return { text: '' };
+    if (opt === 'allow') { const r = moveToMess(game, p.id, m.data.to, { asked: true }); return { text: r.ok ? r.text : `${displayName(p)} stays: ${r.err.toLowerCase()}` }; }
+    think(game, p, 'refusedMess');
+    p.stress = clamp((p.stress || 0) + 4, 0, 100);
+    return { text: `${displayName(p)} goes back to his old mess and eats in silence.` };
+  },
+});
+const b0 = (st, p, q) => { const b = bondBetween(st, p.id, q.id); return b && b.kind !== 'feud'; };
+
+return { MESS_MIN, messes, messById, membersOf, leaderOf, messName, messLabel, messMood, placeInMess, settleMesses, moveToMess, messesDaily };
+})();
+
+// ---- src/core/grievance.js ----
+const __m_src_core_grievance_js = (() => {
+// Grievance that spreads along friendships (3.5, system 3). A grievance lives in a man, and travels
+// along his ties (his mess first, then his friends, his lover, his watch), fastest through the men
+// others listen to: the old hands, the spokesman, the singer, a troublemaker. It stops at a man who
+// thinks well of you, and slows at a loyal mess. So a mutiny has a shape: who started it, who carried
+// it, who held out; and the captain can work on the shape (answer the man the others listen to, move a
+// talker to the other watch, raise him, or put him ashore). Grievances fade unless the cause comes back.
+//
+//   p.griev: { k (a cause, data/thoughts.js CAUSES), n 0..100, from (who told him), day }
+//   p.told:  how many he has passed it on to, this voyage (the ringleader is the one who told most)
+
+const { CAUSES } = __m_src_data_thoughts_js;
+const { aboard, personById, displayName } = __m_src_core_crew_js;
+const { spokesman } = __m_src_core_crewlife_js;
+const { tiesOf, watchOf, otherWatch } = __m_src_core_ties_js;
+const { think, regard } = __m_src_core_thoughts_js;
+const { messById, messName, leaderOf, messMood, settleMesses } = __m_src_core_messes_js;
+const { registerMoment, addMoment, momentBusy } = __m_src_core_shipboard_js;
+const { clamp } = __m_src_core_util_js;
+const TALKER = 35;          // a man this sore talks
+const SORE = 50;            // a man this sore counts against the captain
+const FADE = 3;             // a day, at sea; twice that in port
+const TELLS_A_DAY = 2;
+
+// How far a man's words carry below decks, and how far another's reach him.
+function voice(st, p) {
+  let v = 1;
+  if (p.trait === 'troublemaker') v *= 1.6; else if (p.trait === 'oldSalt') v *= 1.3; else if (p.trait === 'musician') v *= 1.2; else if (p.trait === 'steady') v *= 0.9;
+  if (st.spokesman?.id === p.id) v *= 1.5;
+  if (p.rank === 'petty') v *= 0.8;
+  const m = p.mess && messById(st, p.mess);
+  if (m && leaderOf(st, m)?.id === p.id) v *= 1.3;
+  return v;
+}
+function ear(st, p, cause) {
+  let e = 1;
+  if (p.trait === 'troublemaker') e *= 1.5; else if (p.trait === 'steady') e *= 0.6; else if (p.trait === 'pious') e *= cause === 'hanging' || cause === 'flogging' ? 1.3 : 0.7;
+  if (p.trait === 'greedy' && (cause === 'share' || cause === 'wages')) e *= 1.4;
+  if (p.rank === 'petty') e *= 0.7;
+  const r = regard(st, p);
+  if (r >= 10) e *= 0.12; else if (r >= 4) e *= 0.5; else if (r <= -8) e *= 1.4;
+  const m = p.mess && messById(st, p.mess);
+  if (m && messMood(st, m).loyal) e *= 0.6;
+  return e;
+}
+
+// Something gives men a grievance (a share kept back, a flogging, wages owed). n is how sore.
+function aggrieve(game, p, k, n, from = null) {
+  if (!p || p.status !== 'aboard' || !CAUSES[k]) return;
+  const g = p.griev;
+  if (g && g.k === k) { g.n = clamp(Math.max(g.n, n) + 5, 0, 100); g.day = game.state.day; return; }
+  if (g && g.n >= n) return;
+  p.griev = { k, n: clamp(n, 0, 100), from, day: game.state.day };
+  if (from == null) think(game, p, 'sore', { cause: CAUSES[k], days: 8 });
+}
+function aggrieveAll(game, k, n, pred = () => true) { for (const p of aboard(game.state)) if (pred(p)) aggrieve(game, p, k, n); }
+
+// Once a day: the talk travels and fades. Returns how much it costs the crew's confidence today.
+function grievanceDaily(game) {
+  const st = game.state, rng = game.rng;
+  const crew = aboard(st);
+  if (!crew.length) return 0;
+  settleMesses(game);
+  const port = st.mode === 'port';
+  // The talkers talk.
+  const talkers = rng.shuffle(crew.filter((p) => p.griev && p.griev.n >= TALKER && p.griev.day < st.day));
+  for (const p of talkers) {
+    let told = 0;
+    for (const t of tiesOf(st, p)) {
+      if (told >= TELLS_A_DAY) break;
+      const q = personById(st, t.id);
+      if (!q || q.status !== 'aboard' || q.griev?.k === p.griev.k && q.griev.n >= p.griev.n * 0.7) continue;
+      if (t.kind === 'feud') continue; // a man does not take his enemy's word
+      const e = ear(st, q, p.griev.k);
+      const chance = clamp(0.3 * (p.griev.n / 100) * t.w * voice(st, p) * e, 0, 0.9);
+      if (!rng.chance(chance)) continue;
+      // A man who half believes it passes it on weaker; a man who thinks well of you hardly at all.
+      const n = Math.round(p.griev.n * 0.7 * clamp(e, 0.3, 1));
+      if (q.griev && q.griev.n >= n) continue;
+      q.griev = { k: p.griev.k, n, from: p.id, day: st.day };
+      think(game, q, 'heard', { x: String(p.name).split(' ')[0], cause: CAUSES[p.griev.k], days: 8 });
+      p.told = (p.told || 0) + 1;
+      told++;
+    }
+  }
+  // And it fades.
+  for (const p of crew) {
+    if (!p.griev) continue;
+    p.griev.n -= port ? FADE * 2 : FADE;
+    if (p.griev.n < 10) p.griev = null;
+  }
+  const sore = crew.filter((p) => p.griev?.n >= SORE).length;
+  return sore ? Math.round(sore / crew.length * 30) / 10 : 0; // up to -3 confidence a day when everyone is sore
+}
+
+// What the talk below is about, for the crew screen and the spokesman: the cause most are sore about,
+// who started it, how far it has gone, and which messes it has not reached.
+function talkBelow(game) {
+  const st = game.state, crew = aboard(st, game.player?.id);
+  const sore = crew.filter((p) => p.griev && p.griev.n >= 20);
+  if (!sore.length) return null;
+  const by = {};
+  for (const p of sore) (by[p.griev.k] ||= []).push(p);
+  const [k, list] = Object.entries(by).sort((a, b) => b[1].length - a[1].length)[0];
+  const ring = ringleader(st, list);
+  const reached = new Set(list.map((p) => p.mess).filter(Boolean));
+  const held = [...new Set(crew.map((p) => p.mess).filter(Boolean))].filter((id) => !reached.has(id)).map((id) => messById(st, id)).filter(Boolean);
+  return { cause: k, words: CAUSES[k], n: list.length, of: crew.length, ringleader: ring, started: list.find((p) => p.griev.from == null) || ring, held: held.map((m) => messName(st, m)), list };
+}
+// The man the talk comes back to: the one who has told most, and is still sore.
+function ringleader(st, list = aboard(st).filter((p) => p.griev && p.griev.n >= TALKER)) {
+  return [...list].sort((a, b) => (b.told || 0) - (a.told || 0) || b.griev.n - a.griev.n)[0] || null;
+}
+// Who heard it from him.
+function listenersOf(st, p) { return aboard(st).filter((q) => q.griev?.from === p.id); }
+
+// The captain works on the shape of it.
+function answerTalker(game, personId) {
+  const st = game.state, p = personById(st, personId), rng = game.rng;
+  if (!p?.griev) return { ok: false, err: 'He has nothing to say against you.' };
+  const lead = game.fx?.skills?.leadership || 0;
+  const k = p.griev.k;
+  if (rng.chance(clamp(0.35 + lead * 0.08 + (p.trait === 'troublemaker' ? -0.15 : 0), 0.1, 0.9))) {
+    p.griev = null; think(game, p, 'answered');
+    for (const q of listenersOf(st, p)) if (q.griev?.k === k) { q.griev.n = Math.round(q.griev.n / 2); if (rng.chance(0.5)) think(game, q, 'answered'); }
+    return { ok: true, good: true, text: `You hear ${displayName(p)} out on the forecastle, in front of the others, and answer him straight. By the end of the dog watch ${String(p.name).split(' ')[0]} is nodding, and the men who were listening to him have gone back to their yarns.` };
+  }
+  p.griev.n = clamp(p.griev.n + 10, 0, 100);
+  return { ok: true, good: false, text: `You hear ${displayName(p)} out, and he hears nothing you say. "Words, captain," he says, loud enough for the waist. The men watching saw him stand up to you.` };
+}
+function moveWatch(game, personId) {
+  const st = game.state, p = personById(st, personId);
+  if (!p || p.status !== 'aboard') return { ok: false, err: 'He is not aboard.' };
+  const to = otherWatch(p);
+  p.watch = to;
+  if (p.griev) { p.griev.n = clamp(p.griev.n + 5, 0, 100); game.happen?.({ kind: 'moved', who: p.id }); }
+  return { ok: true, text: `${displayName(p)} goes to the ${to} watch. He will stand his watches with other men now.` };
+}
+
+// The spokesman (or the quartermaster) comes aft about the talk below.
+registerMoment('talk', {
+  make(game, rng) {
+    const st = game.state, L = st.shipLife;
+    if (L?.talkDay != null && st.day - L.talkDay < 8) return null;
+    const T = talkBelow(game);
+    if (!T || T.n < Math.max(4, T.of * 0.2) || !T.ringleader) return null;
+    const spk = spokesman(st)?.person;
+    const r = T.ringleader;
+    if (momentBusy(st, r.id)) return null;
+    st.shipLife.talkDay = st.day;
+    const who = spk && spk.id !== r.id ? spk : null;
+    const held = T.held.length ? ` It has not reached ${T.held.slice(0, 2).join(' or ')}${T.held.length > 2 ? ', or a few others' : ''}.` : ' Every mess has heard it.';
+    return addMoment(game, 'talk', { who: [r.id, ...(who ? [who.id] : [])], title: 'Talk below', data: { r: r.id },
+      text: `${who ? `${displayName(who)} comes aft` : 'The quartermaster comes to the cabin'} with his hat in his hands. "There is talk in the forecastle, captain. ${T.n} of them, saying ${T.words}. It started with ${displayName(T.started || r)}${T.started && T.started.id !== r.id ? `, but it is ${displayName(r)} they listen to now` : ''}.${held}"`,
+      options: [
+        { id: 'answer', label: `Hear ${String(r.name).split(' ')[0]} out in front of the others`, tag: 'fairShare' },
+        { id: 'watch', label: `Move him to the ${otherWatch(r)} watch`, tag: 'order' },
+        ...(r.rank === 'able' ? [{ id: 'raise', label: 'Rate him petty officer: give him something to lose', tag: 'privilege' }] : []),
+        { id: 'leave', label: 'Let them talk', tag: 'ease' },
+      ] });
+  },
+  def: 'leave', pref: { ruthless: 'watch', ambitious: 'watch', honourable: 'answer', comradely: 'answer', devout: 'answer', greedy: 'leave' },
+  resolve(game, m, opt) {
+    const st = game.state, r = personById(st, m.data.r);
+    if (!r) return { text: '' };
+    if (opt === 'answer') return answerTalker(game, r.id);
+    if (opt === 'watch') return moveWatch(game, r.id);
+    if (opt === 'raise') {
+      if (r.rank !== 'able') return { ok: false, err: 'He is not an able seaman.' };
+      r.rank = 'petty'; r.griev = null; think(game, r, 'promoted', { rank: 'petty officer' });
+      for (const q of listenersOf(st, r)) if (q.griev) q.griev.n = Math.round(q.griev.n * 0.7);
+      return { text: `${displayName(r)} is rated petty officer. He has something to lose now, and the forecastle knows it. Some of them think he was bought.` };
+    }
+    return { text: 'The talk goes on below, and stops when an officer comes forward.' };
+  },
+});
+
+return { watchOf, TALKER, SORE, FADE, TELLS_A_DAY, voice, ear, aggrieve, aggrieveAll, grievanceDaily, talkBelow, ringleader, listenersOf, answerTalker, moveWatch };
+})();
+
+// ---- src/core/animals.js ----
+const __m_src_core_animals_js = (() => {
+// The ship's other company (3.5, system 21). Ship's cats kept the rats from the food and from gnawing
+// ropes and woodwork, and a cat lost overboard was said to bring a storm. Here the hold has rats, and
+// they breed; a cat keeps them down, and the cat is a person aboard: named, petted, blamed. A ship may
+// also keep a ratting terrier, a milch goat for the sick, a coop of hens, a parrot. Animals eat a
+// little, die, go overboard in a blow, or are eaten when the stores run out, and the crew remember it.
+// (The relic "A ship's cat" is a luck charm, kept in the strongbox; this cat is the one in the hold.)
+//
+//   st.animals: { list: [{ id, kind, name, female, born, keeper, gone? }], rats 0..100, smoked? }
+
+const { ANIMALS, CAT_NAMES, ANIMAL_NAMES } = __m_src_data_thoughts_js;
+const { aboard, displayName } = __m_src_core_crew_js;
+const { think, thinkAll } = __m_src_core_thoughts_js;
+const { legendsOn } = __m_src_core_items_js;
+const { hasGear } = __m_src_core_stores_js;
+const { shipStats } = __m_src_core_ships_js;
+const { clamp } = __m_src_core_util_js;
+const { Rng } = __m_src_core_rng_js;
+function zoo(st) {
+  const Z = (st.animals ||= { list: [], rats: 8 });
+  Z.list ||= []; Z.rats ??= 8;
+  return Z;
+}
+const living = (st) => zoo(st).list.filter((a) => !a.gone);
+const theCat = (st) => living(st).find((a) => a.kind === 'cat') || null;
+
+// Every ship that puts to sea carries a cat (a new career's first ship, and old saves the first day).
+function ensureCat(game) {
+  const st = game.state, Z = zoo(st);
+  if (Z.catChecked) return theCat(st);
+  Z.catChecked = true;
+  if (theCat(st)) return theCat(st);
+  return addAnimal(game, 'cat');
+}
+function addAnimal(game, kind, name = null) {
+  // The animals' own dice, so that a cat coming aboard changes nothing else in the world.
+  const st = game.state, Z = zoo(st), rng = new Rng(((st.seed || 7) * 7919 + (Z.seq || 0) * 104729 + st.day * 31) >>> 0);
+  const used = new Set(Z.list.map((a) => a.name));
+  const pool = (kind === 'cat' ? CAT_NAMES : ANIMAL_NAMES[kind] || ['it']).filter((n) => !used.has(n));
+  const a = { id: (Z.seq = (Z.seq || 0) + 1), kind, name: name || rng.pick(pool.length ? pool : CAT_NAMES), female: rng.chance(0.5), born: st.day - rng.int(40, 300), keeper: null };
+  // Somebody takes to it.
+  const crew = aboard(st, game.player?.id);
+  const k = crew.find((p) => p.station === 'cook') || (crew.length ? rng.pick(crew) : null);
+  if (k) a.keeper = k.id;
+  Z.list.push(a);
+  return a;
+}
+function animalWords(st, a) {
+  const D = ANIMALS[a.kind];
+  if (a.kind === 'cat') return `${a.name}, the ship's cat, ${a.female ? 'a sharp-eared tabby' : 'a scarred black tom'}`;
+  if (a.kind === 'hens') return 'a coop of hens';
+  return `${a.name}, ${(D?.name || a.kind).replace(/^A /, 'a ')}`;
+}
+function ratWords(n) {
+  return n >= 70 ? 'swarming: they run over the sleeping men' : n >= 45 ? 'many, and bold' : n >= 20 ? 'a few, kept down' : 'scarcely any';
+}
+
+// Buy an animal in port (the chandler); goats and hens want the pen and coops.
+function buyAnimal(game, kind) {
+  const st = game.state, D = ANIMALS[kind];
+  if (!D || kind === 'cat') return { ok: false, err: 'Not for sale.' };
+  if (st.mode !== 'port') return { ok: false, err: 'Only in port.' };
+  if (living(st).filter((a) => a.kind === kind).length >= (kind === 'hens' ? 1 : 2)) return { ok: false, err: 'You have enough of those.' };
+  if (st.gold < D.cost) return { ok: false, err: `That costs ${D.cost} gold.` };
+  st.gold -= D.cost;
+  const a = addAnimal(game, kind);
+  return { ok: true, text: `${animalWords(st, a)} comes aboard.` };
+}
+// Smoke the hold in port: the rats die, and the cat goes ashore for the day.
+function smokeCost(game) { return Math.round(12 * Math.max(1, shipStats(game.player).size)); }
+function smokeHold(game) {
+  const st = game.state, Z = zoo(st), cost = smokeCost(game);
+  if (st.mode !== 'port') return { ok: false, err: 'Only in port.' };
+  if (st.gold < cost) return { ok: false, err: `That costs ${cost} gold.` };
+  if (Z.smoked === st.day) return { ok: false, err: 'The hold is still full of smoke.' };
+  st.gold -= cost; Z.rats = 0; Z.smoked = st.day;
+  const c = theCat(st);
+  return { ok: true, text: `Sulphur and wet straw in pans, the hatches battened down: by evening the hold is full of dead rats.${c ? ` ${c.name} watches from the quay, offended.` : ''}` };
+}
+
+// Once a day: the rats breed and eat; the cat and the terrier keep them down; the animals eat a
+// little; a cat may go over the side in a blow.
+function animalsDaily(game, { storm = false } = {}) {
+  const st = game.state, rng = game.rng, Z = zoo(st), ship = game.player;
+  if (!ship) return;
+  ensureCat(game);
+  const crew = aboard(st, ship.id);
+  const prov = ship.cargo?.provisions || 0;
+  // Rats breed in a hold with bread in it, and come aboard from every quay.
+  let grow = 1.2 + (prov > 0 ? 1 : 0) + (st.mode === 'port' ? 2.5 : 0);
+  let catch_ = 0;
+  for (const a of living(st)) catch_ += ANIMALS[a.kind]?.rats || 0;
+  Z.rats = clamp(Z.rats + grow - catch_ * (Z.rats > 5 ? 1 : 0.3), 0, 100);
+  // They eat the bread.
+  if (prov > 0 && Z.rats >= 20) { const lost = Math.min(prov, Math.floor(prov * Z.rats * 0.00015 + (Z.rats >= 60 ? 1 : 0))); if (lost > 0) { ship.cargo.provisions = prov - lost; const sp = (st.spoilage ||= { since: st.day, lost: {}, animals: 0 }); sp.lost.rats = (sp.lost.rats || 0) + lost; } }
+  if (Z.rats >= 45 && rng.chance(0.4)) thinkAll(game, 'rats');
+  // The animals eat.
+  let eat = 0;
+  for (const a of living(st)) eat += ANIMALS[a.kind]?.eats || 0;
+  Z.fodder = (Z.fodder || 0) + eat;
+  if (Z.fodder >= 1 && (ship.cargo?.provisions || 0) > 0) { const n = Math.floor(Z.fodder); ship.cargo.provisions = Math.max(0, ship.cargo.provisions - n); Z.fodder -= n; }
+  // Goats and hens without a pen sicken.
+  for (const a of living(st)) {
+    if ((a.kind === 'goat' || a.kind === 'hens') && !hasGear(ship, 'coops') && rng.chance(0.03)) { a.gone = { day: st.day, how: 'sickened' }; game.msg?.(`${a.kind === 'hens' ? 'The hens have' : `${a.name} the goat has`} sickened and died below. A pen on deck would have kept ${a.kind === 'hens' ? 'them' : 'her'}.`, 'warn'); }
+  }
+  // The cat: a comfort to someone most days.
+  const c = theCat(st);
+  if (c && crew.length && rng.chance(0.5)) { const p = rng.pick(crew); think(game, p, 'catPet', { x: c.name }); }
+  // In a blow, the cat may go over the side.
+  if (c && storm && st.mode === 'sea' && rng.chance(0.03)) loseCat(game, c, 'washed overboard in the blow');
+  // Old age.
+  for (const a of living(st)) if (st.day - a.born > (a.kind === 'cat' ? 600 : 400) && rng.chance(0.01)) { a.gone = { day: st.day, how: 'died of old age' }; const k = a.keeper && aboard(st).find((p) => p.id === a.keeper); if (k) k.stress = clamp((k.stress || 0) + 5, 0, 100); game.msg?.(`${a.name} died in the night, of old age, under the galley stove.`, 'info'); }
+  Z.list = Z.list.filter((a) => !a.gone || st.day - a.gone.day < 60);
+}
+function loseCat(game, c, how) {
+  const st = game.state;
+  c.gone = { day: st.day, how };
+  thinkAll(game, 'catLost', { x: c.name });
+  for (const p of aboard(st)) p.stress = clamp((p.stress || 0) + (p.trait === 'pious' || p.trait === 'nervous' || p.trait === 'oldSalt' ? 5 : 2), 0, 100);
+  const k = c.keeper && aboard(st).find((p) => p.id === c.keeper);
+  if (k) k.stress = clamp((k.stress || 0) + 8, 0, 100);
+  // The old hands expect a storm. With the supernatural on, they may be right.
+  if (legendsOn(st)) st.catCurse = st.day + 6;
+  game.msg?.(`${c.name}, the ship's cat, is ${how}. The old hands look at the sky and say nothing.`, 'warn');
+}
+// The goat or the hens, when the stores are gone (asked from game.js when the crew go hungry).
+function eatable(st) { return living(st).filter((a) => a.kind === 'goat' || a.kind === 'hens'); }
+function eatAnimal(game, a) {
+  const st = game.state, ship = game.player;
+  if (!a || a.gone) return { ok: false, err: 'Nothing left to eat.' };
+  a.gone = { day: st.day, how: 'eaten' };
+  ship.cargo.provisions = (ship.cargo.provisions || 0) + (a.kind === 'goat' ? 6 : 3);
+  for (const p of aboard(st, ship.id)) if (p.id === a.keeper || p.trait === 'pious') think(game, p, 'animalEaten', { x: a.kind === 'hens' ? 'the hens' : a.name });
+  return { ok: true, text: `${a.kind === 'hens' ? 'The hens go' : `${a.name} goes`} into the pot.` };
+}
+
+return { zoo, living, theCat, ensureCat, addAnimal, animalWords, ratWords, buyAnimal, smokeCost, smokeHold, animalsDaily, loseCat, eatable, eatAnimal };
+})();
+
+// ---- src/core/spine.js ----
+const __m_src_core_spine_js = (() => {
+// The spine (3.5, the shared foundations of "Bringing the sea to life"). One call for everything that
+// happens to the people aboard: a death, a wound, a fight, a share, a flogging, a promotion, a man
+// moved, a run ashore. It finds who was there, and each system answers it in its own way: the hands'
+// thoughts (thoughts.js) and the talk below (grievance.js) in 3.5; the memory and knowledge ledgers and
+// the carriers in later releases. Nothing else writes to those, so every system hears of everything
+// the same way, and no system has to know about another.
+//
+// Low-level modules that cannot import this (it imports them) call `game.happen?.(ev)`, which the Game
+// forwards here.
+//
+//   ev: { kind, who?: person id, x?: words, ... }
+
+const { aboard, personById, displayName } = __m_src_core_crew_js;
+const { bondsOf } = __m_src_core_crewlife_js;
+const { messmatesOf } = __m_src_core_ties_js;
+const { think, thinkAll, forget } = __m_src_core_thoughts_js;
+const { aggrieve, aggrieveAll } = __m_src_core_grievance_js;
+const { theCat } = __m_src_core_animals_js;
+const { RANKS } = __m_src_data_crew_js;
+const first = (p) => String(p?.name || '').split(' ')[0];
+const friendsOf = (st, p) => bondsOf(st, p.id).filter((b) => b.kind !== 'feud').map((b) => personById(st, b.a === p.id ? b.b : b.a)).filter((q) => q && q.status === 'aboard');
+
+// Who was there: the hands of the ship it happened in (the flagship unless said).
+function presentAt(game, ev) {
+  const st = game.state, shipId = ev.shipId ?? game.player?.id;
+  return aboard(st, shipId);
+}
+
+function happen(game, ev) {
+  const st = game.state;
+  if (!st.people || !game.player) return ev;
+  ev.day = st.day;
+  const present = presentAt(game, ev);
+  const p = ev.who != null ? personById(st, ev.who) : null;
+  const name = p ? first(p) : ev.x;
+  switch (ev.kind) {
+    case 'death': {
+      if (!p) break;
+      const mates = new Set(messmatesOf(st, p).map((q) => q.id));
+      const friends = new Set(friendsOf(st, p).map((q) => q.id));
+      for (const q of present) {
+        if (q.id === p.id) continue;
+        if (friends.has(q.id)) think(game, q, 'friendDied', { x: displayName(p) });
+        else if (mates.has(q.id)) { think(game, q, 'messmateDied', { x: first(p) }); q.stress = Math.min(100, (q.stress || 0) + 6); }
+      }
+      if (ev.cause === 'battle') { st.fore ||= {}; const F = st.fore; F.lostToday = F.lostDay === st.day ? (F.lostToday || 0) + 1 : 1; F.lostDay = st.day; thinkAll(game, F.lostToday > 1 ? 'shipmatesLost' : 'shipmateLost', { n: F.lostToday, x: displayName(p) }); }
+      if (/hanged/.test(ev.cause || '')) {
+        for (const q of present) {
+          if (q.id === p.id) continue;
+          if (mates.has(q.id) || friends.has(q.id)) { think(game, q, 'hangedMess', { x: first(p) }); aggrieve(game, q, 'hanging', 80); }
+          else { think(game, q, 'hangedSaw', { x: first(p) }); if (q.trait === 'pious') aggrieve(game, q, 'hanging', 45); }
+        }
+      }
+      break;
+    }
+    case 'wounded':
+      if (!p) break;
+      think(game, p, 'wounded', { wound: ev.wound || 'wound', days: 14 });
+      for (const q of friendsOf(st, p)) think(game, q, 'woundedFriend', { x: first(p), wound: ev.wound || 'wound' });
+      break;
+    case 'maimed':
+      if (p) think(game, p, 'maimed', { limb: ev.limb || 'stump' });
+      break;
+    case 'battle':
+      for (const q of present) {
+        if (q.battles === 1) think(game, q, 'firstFight');
+        think(game, q, ev.won ? 'won' : 'lost');
+      }
+      break;
+    case 'share':
+      if (ev.how === 'generous') for (const q of present) think(game, q, 'shareGenerous');
+      else if (ev.how === 'privilege') { for (const q of present) think(game, q, 'sharePrivilege'); aggrieveAll(game, 'share', 55, (q) => q.trait === 'greedy' || q.trait === 'troublemaker'); aggrieveAll(game, 'share', 30, (q) => q.trait !== 'steady' && q.trait !== 'greedy' && q.trait !== 'troublemaker'); }
+      else for (const q of present) think(game, q, 'shareArticles');
+      break;
+    case 'flog': case 'fine': case 'forgive': {
+      if (!p) break;
+      if (ev.kind === 'forgive') { think(game, p, 'forgiven'); forget(p, 'sore'); if (p.griev) p.griev.n = Math.round(p.griev.n / 2); break; }
+      if (ev.kind === 'fine') { think(game, p, 'fined'); break; }
+      think(game, p, 'flogged'); aggrieve(game, p, 'flogging', ev.unjust ? 85 : 65);
+      const mates = new Set(messmatesOf(st, p).map((q) => q.id));
+      for (const q of present) {
+        if (q.id === p.id) continue;
+        if (mates.has(q.id)) { think(game, q, 'floggedMess', { x: first(p) }); aggrieve(game, q, 'flogging', ev.unjust ? 60 : 35); }
+        else think(game, q, 'floggedSaw', { x: first(p) });
+      }
+      break;
+    }
+    case 'promoted': {
+      if (!p) break;
+      const rank = (RANKS[p.rank]?.name || 'able').toLowerCase();
+      think(game, p, 'promoted', { rank });
+      for (const q of messmatesOf(st, p)) think(game, q, 'messmatePromoted', { x: first(p), rank });
+      if (p.griev) p.griev.n = Math.round(p.griev.n / 2);
+      break;
+    }
+    case 'wantMet': if (p) think(game, p, 'wantMet', { x: ev.text }); break;
+    case 'captainWord': if (p && !p.spokenTo) { p.spokenTo = st.day; think(game, p, 'captainWord'); } break;
+    case 'tot': thinkAll(game, 'tot'); break;
+    case 'moved': if (p) aggrieve(game, p, 'moved', 40); break;
+    case 'overruled': aggrieveAll(game, 'course', 45, (q) => q.trait === 'troublemaker' || q.trait === 'oldSalt'); aggrieveAll(game, 'course', 25, (q) => q.trait !== 'steady'); break;
+    case 'catLost': break;
+    default: break;
+  }
+  return ev;
+}
+
+// The crew's day, after their strain has moved: what they all share, in their words.
+function crewDay(game, { hungry = false, unpaid = false, storm = false, atSea = false, port = false, daysOut = 0 } = {}) {
+  const st = game.state, rng = game.rng;
+  if (!st.people || !game.player) return;
+  const crew = aboard(st, game.player.id);
+  if (hungry) { thinkAll(game, 'hungry'); if (st.fore?.hungryDays >= 3) aggrieveAll(game, 'rations', 30, (q) => q.trait !== 'steady'); }
+  st.fore ||= {}; st.fore.hungryDays = hungry ? (st.fore.hungryDays || 0) + 1 : 0;
+  if (unpaid) { thinkAll(game, 'unpaid'); aggrieveAll(game, 'wages', (st.unpaidDays || 1) >= 3 ? 50 : 30, (q) => q.trait === 'greedy' || q.trait === 'troublemaker' || (st.unpaidDays || 1) >= 3); }
+  if (storm) {
+    thinkAll(game, 'storm');
+    for (const q of crew) if ((q.station === 'helm' || q.station === 'topman') && q.trait === 'nervous' && rng.chance(0.1)) think(game, q, 'heldTheWheel');
+  }
+  if (atSea && daysOut > 12) { thinkAll(game, 'longSea', { n: daysOut }); if (daysOut > 25) aggrieveAll(game, 'sea', 25, (q) => q.trait === 'troublemaker' || q.trait === 'drinker'); }
+  if (port) thinkAll(game, 'ashore');
+}
+
+return { theCat, presentAt, happen, crewDay };
+})();
+
 // ---- src/core/game.js ----
 const __m_src_core_game_js = (() => {
 // Game: owns the campaign state and runs the simulation. No DOM or canvas code here,
@@ -42542,12 +43450,17 @@ const chronicle = __m_src_core_chronicle_js;
 const hallStarts = __m_src_core_starts_js;
 const { kl } = __m_src_core_keys_js;
 const firstMate = __m_src_core_firstmate_js;
+const spine = __m_src_core_spine_js;
+const thoughtsMod = __m_src_core_thoughts_js;
+const messesMod = __m_src_core_messes_js;
+const grievanceMod = __m_src_core_grievance_js;
+const animalsMod = __m_src_core_animals_js;
 const DAY_SECONDS = 120;
 const HASTEN = 4;               // time runs this many times faster while hastening (B1)          // one in-game day per two real minutes at sea
 const NEAR_RANGE = 3600;                  // beyond this, NPCs use cheap abstract movement
 const POPULATION = { merchant: 16, patrol: 8, pirate: 7 }; // pirates: set by the difficulty preset
 const SAVE_VERSION = 9;
-const GAME_VERSION = '3.4.2'; // shown on the main menu
+const GAME_VERSION = '3.5.0'; // shown on the main menu
 
 function cargoValue(cargo) { return Object.entries(cargo || {}).reduce((a, [g, q]) => a + (GOODS[g]?.base || 0) * q, 0); }
 
@@ -42635,6 +43548,7 @@ class Game {
     // A captain knows the waters round home (EXP-1): the rest of the chart is filled in by sailing it.
     regions.markCharted(game, game.player.x, game.player.y, 5200);
     crew.seedRoster(game, { faction: world.islands[world.start.islandId]?.faction, experience: 0.35 });
+    animalsMod.ensureCat(game); // 3.5: the cat is on the rail as the first voyage begins
     gov.signArticles(game, opts.articles || {});
     game.populate(true);
     rivals.initRivals(game);
@@ -42970,7 +43884,18 @@ class Game {
 
     // Morale drifts toward a baseline set by Leadership.
     const hungry = have < need;
-    crew.stressDaily(this, { atSea: st.mode === 'sea', hungry, unpaid: !paid, storm: !!(p && events.stormAt(st, p.x, p.y) > 0.3), port: st.mode === 'port' });
+    const stormy = !!(p && events.stormAt(st, p.x, p.y) > 0.3);
+    crew.stressDaily(this, { atSea: st.mode === 'sea', hungry, unpaid: !paid, storm: stormy, port: st.mode === 'port' });
+    // 3.5: the reasons, in the hands' own words; their messes; the talk below; the ship's cat.
+    spine.crewDay(this, { hungry, unpaid: !paid, storm: stormy, atSea: st.mode === 'sea', port: st.mode === 'port', daysOut: st.day - (st.lastPortDay ?? st.day) });
+    thoughtsMod.thoughtsDaily(this);
+    messesMod.messesDaily(this);
+    const talk = grievanceMod.grievanceDaily(this);
+    if (talk) gov.shiftConfidence(this, -talk);
+    animalsMod.animalsDaily(this, { storm: stormy });
+    // A hold overfull after the fleet has shrunk (a ship lost by some way that did not shed her cargo)
+    // goes over the side, cheapest first, rather than sail on over capacity (the bots found one, 3.5).
+    if (cargoFree(st) < 0) { const lost = dropOverflow(st); const words = Object.entries(lost).map(([g, n]) => `${n} ${GOODS[g]?.name?.toLowerCase() || g}`); if (words.length) this.msg(`The hold is overfull since the fleet shrank: ${words.join(', ')} go over the side.`, 'warn'); }
     st.veterancy = crew.veterancy(st);
     const baseline = 55 + effects.moraleBonus(this.fx) + legacy.traitMorale(st) + crew.crewMoraleMod(st) + (gov.DISCIPLINE[crew.articlesOf(st).discipline]?.morale || 0);
     p.morale += (baseline - p.morale) * 0.15;
@@ -44647,6 +45572,7 @@ class Game {
     bd.log = [...(bd.log || []).filter((l) => !b.log.includes(l)), ...b.log.slice(-8)];
     if (cas.dead || cas.wounded) bd.log.push(`Your losses: ${cas.dead} dead, ${cas.wounded} wounded.${!this.fx.surgeon && cas.wounded ? ' A surgeon would save more of them.' : ''}`);
     crew.afterBattle(this, { won: b.result === 'won', boarding: true });
+    this.happen({ kind: 'battle', won: b.result === 'won', boarding: true });
     crew.spendGrenades(this, (b.grenadesStart || 0) - (b.grenades?.us || 0), p.id); // thrown is gone
     crew.creditKills(this, Math.round((before - t.crew) * 0.5)); // who killed whom (F3)
     const res = { winner: b.result === 'won' ? 'attacker' : 'defender', log: bd.log, attackerLosses: cas.dead + cas.wounded, defenderLosses: before - t.crew };
@@ -45143,7 +46069,10 @@ class Game {
   // Fame and the journal (stage 3).
   fame(n, why) { legend.addFame(this, n, why); }
   journal(text, kind) { legend.journal(this, text, kind); }
-  onCrewDeath(p) { crewlife.onCrewDeath(this, p); }
+  // 3.5: the spine hears of the death before the friendships it touches are struck from the books.
+  onCrewDeath(p) { spine.happen(this, { kind: 'death', who: p.id, cause: p.goneCause }); crewlife.onCrewDeath(this, p); }
+  // 3.5: anything that happens to the people aboard goes through the spine (core/spine.js).
+  happen(ev) { return spine.happen(this, ev); }
   onPrisonerFreed(p) { story.onPrisonerFreed?.(this, p); }
   // Quests completed (3.1): note the state before a completion runs, and record it after with what
   // changed and what comes next (core/completions.js).
@@ -45463,6 +46392,7 @@ class Game {
     if (this.state.captainPlace === 'below') { p.morale = Math.max(0, p.morale - 6); this.state.confidence = Math.max(0, (this.state.confidence ?? 55) - 4); this.msg('The people saw where you spent the fight. Nobody says it to your face.', 'warn'); }
     this.reconcileCrew();
     crew.afterBattle(this, { won: p.hull > shipStats(p).hull * 0.35 });
+    this.happen({ kind: 'battle', won: p.hull > shipStats(p).hull * 0.35 });
     shiplore.loreFightEnded(this, shipStats);
     // Her log (SHIP-1): who she fought.
     const st2 = this.state, foes = st2.ships.filter((s) => !isPlayerSide(s) && s.role !== 'monster' && (s.ai?.attackedByPlayer || s.hostileToPlayer || s.ai?.targetId === p.id) && (Math.hypot(s.x - p.x, s.y - p.y) < 3000 || (s.sunk && st2.time - (s.sunkAt || 0) < 150))).map((s) => `the ${s.name}`);
@@ -48138,6 +49068,16 @@ function sleeper(x, y, { id = 0, attr = '', title = '', w = 16 } = {}) {
   const L = looks(id);
   return `<g class="cw-sleep" ${attr} transform="translate(${x.toFixed(1)},${y.toFixed(1)})" style="${L}"><path d="M${-w / 2},0 Q0,7 ${w / 2},0" fill="#d8ccb0" ${ink(0.5)}/><path d="M${-w / 2 + 2},1.4 Q0,8 ${w / 2 - 4},1.6 Q0,3 ${-w / 2 + 2},1.4 Z" fill="var(--shirt)" opacity=".85"/><circle cx="${w / 2 - 3}" cy="1.4" r="1.9" fill="var(--skin)" ${ink(0.4)}/><path d="M${-w / 2},0 l-2.5,-3.5 M${w / 2},0 l2.5,-3.5" ${ink(0.35)}/>${title ? `<title>${title}</title>` : ''}</g>`;
 }
+// 3.5: the ship's other company, drawn small: a sitting cat, a terrier, a goat. They can be tapped.
+function beast(kind, x, y, { attr = '', title = '', flip = false } = {}) {
+  const f = flip ? -1 : 1;
+  const body = kind === 'cat'
+    ? `<path d="M0,0 c-1,-3 -1,-6 1,-7 l-0.6,-2.6 l1.8,1.6 l1.6,0 l1.8,-1.6 l-0.6,2.6 c2,1.2 2,4.2 1,7 z" fill="#2b2420"/><path d="M4.6,-0.4 q3.2,-0.6 2.4,-4" fill="none" stroke="#2b2420" stroke-width="1.1" stroke-linecap="round"/><circle cx="1.5" cy="-6.4" r="0.45" fill="#d9c27a"/><circle cx="3.1" cy="-6.4" r="0.45" fill="#d9c27a"/>`
+    : kind === 'dog'
+      ? `<path d="M-4,0 v-3 c0,-2 2,-3 5,-3 h3 l1,-2 l1.4,1.2 l0.4,2.2 l1.6,1 l-0.4,1.2 h-1.8 v2.4 h-1.4 v-2 h-4.6 v2 h-1.4 z" fill="#8a6a46"/><path d="M-4,-3 l-2,-1.6" stroke="#8a6a46" stroke-width="1.1"/>`
+      : `<path d="M-5,0 v-3.4 c0,-2.2 2.2,-3 5.4,-3 h2.6 l1.2,-2.6 l1.6,0.6 l-0.4,2.2 l1.4,1.4 l-0.6,1 h-2 v3.8 h-1.4 v-3.2 h-5 v3.2 z" fill="#d9d0bd" stroke="#5a4a30" stroke-width="0.5"/><path d="M5.6,-9 l1.4,-2" stroke="#5a4a30" stroke-width="0.7"/>`;
+  return `<g class="cw-beast" ${attr} transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${f},1)" tabindex="0" role="button"><title>${title}</title>${body}<rect x="-6" y="-12" width="14" height="13" fill="transparent"/></g>`;
+}
 // A sick man on a cot.
 function cot(x, y, { id = 0, attr = '', title = '' } = {}) {
   const L = looks(id);
@@ -48155,7 +49095,7 @@ function waves(x0, x1, y, n = 3, gap = 9) {
   return `<path d="${d}" fill="none" stroke="${INK}" stroke-width=".7" opacity=".45"/>`;
 }
 
-return { INK, FIGURES, STATION_FIGURE, setLivery, looks, defs, person, group, cannon, cask, bale, lantern, hammock, sleeper, cot, bubble, waves };
+return { INK, FIGURES, STATION_FIGURE, setLivery, looks, defs, person, group, cannon, cask, bale, lantern, hammock, sleeper, beast, cot, bubble, waves };
 })();
 
 // ---- src/ui/cutaway.js ----
@@ -48701,6 +49641,15 @@ function routineLayer(G, ship, R, tops) {
     }
     if (over) { const at = pts[pts.length - 1] || (PL[g.place] || PL.waist)[0]; labels += `<g class="cw-act more" transform="translate(${(at.x + 12).toFixed(1)},${(at.y - 4).toFixed(1)})"><text>+${over}</text></g>`; }
     if (g.act !== 'watch' || pts.length > 2) label(pts, g.name, g.ids.length, g.act === 'asleep' ? 'hammocks' : g.place);
+  }
+  // 3.5: the ship's cat (by the galley stove at night, on the gun deck by day), a terrier, a goat.
+  for (const [k, a] of (R.animals || []).entries()) {
+    if (a.kind !== 'cat' && a.kind !== 'dog' && a.kind !== 'goat') continue;
+    const night = (R.dark || 0) > 0.5;
+    const base = a.kind === 'cat' ? (night ? (PL.galley[0] || PL.waist[0]) : (PL.capstan[0] || PL.waist[0])) : a.kind === 'dog' ? PL.waist[PL.waist.length - 1] : PL.waist[2] || PL.waist[0];
+    if (!base) continue;
+    const pt = { x: base.x + (a.kind === 'cat' ? (night ? -9 : 13) : a.kind === 'dog' ? 8 : -14) + k * 2, y: base.y };
+    b += art.beast(a.kind, pt.x, pt.y, { attr: `data-animal="${a.id}"`, title: `${esc(a.name)}${a.kind === 'cat' ? ', the ship\'s cat' : ''}`, flip: k % 2 === 1 });
   }
   // The officers where their work takes them; those asleep in the gunroom are not drawn.
   const oused = {};
@@ -52594,6 +53543,11 @@ const GUIDE = [
   { id: 'stores', kw: 'spoilage weevils careen foul', area: 'ship', title: 'Stores, spoilage and the bottom', text: 'Provisions spoil, casks leak and wet holds ruin cargo; the purser reports it once a week, with what would stop it. Now and then weevils get into the bread room: serve it, sift it, or victual from the land. Her bottom fouls in warm water until she is a fifth slower: careen her on a quiet beach, pay a yard, or sheathe her in copper.' },
   { id: 'crew', area: 'ship', title: 'The crew', text: 'Every sailor ({k:crew}) has a name, home, rank, station, skills, arms and a breaking point. Wounds can cost a limb; veterans fight better. Pay, food and victories keep them; hunger, floggings and broken promises lose them.' },
   { id: 'aboard', area: 'ship', title: 'Life aboard', text: 'The life aboard screen ({k:aboard}) shows who is where and what they want: to be rated able, a place at the guns, a word with you. Moments come from the ship\'s own life. Leave one and your first officer settles it.' },
+  // 3.5: the forecastle
+  { id: 'thoughts', kw: 'strain mood mind thoughts why', area: 'ship', title: 'What a man has on his mind', text: 'Every hand\'s strain has reasons, and his page in Life aboard ({k:aboard}) gives the heaviest in his own words: a friend drowned, a flogging, a fair share, a double tot, short rations. Some are his alone; some the whole crew share. They fade with time. A few change a man for good: a nervous boy who holds the wheel through a blow can come out of it steady; a man flogged may not be the same again.' },
+  { id: 'messes', kw: 'mess messmates eat together', area: 'ship', title: 'Messes', text: 'Every hand eats in a mess of four to eight, as sailors did: the same men at the same place on the berth deck for every meal. A mess is named for what it is (the Irish mess, the old hands\', a man\'s own). Messmates grieve together, make friends more easily, and hear the talk below first. A man can ask to change mess; you can move him without asking, but he resents it. The crew page ({k:crew}) sorts by mess.' },
+  { id: 'talk', kw: 'grievance mutiny talk ringleader spokesman watch', area: 'ship', title: 'Talk below', text: 'A grievance (a share kept back, a flogging, wages owed, short rations, a vote overruled) lives in the men who hold it and travels along their ties: their mess, their friends, their watch. It moves fastest through the men others listen to, and stops at a man who thinks well of you, or a loyal mess. Life aboard ({k:aboard}) says who started it and how far it has gone. Hear a talker out in front of the others, move him to the other watch, rate him petty officer, or put him ashore. The man who carried it furthest leads any mutiny. Grievances fade unless the cause comes back.' },
+  { id: 'animals', kw: 'cat rats dog goat hens parrot animals', area: 'ship', title: 'The ship\'s other company', text: 'The hold has rats, and they breed, faster in port; they eat the bread. Your ship\'s cat keeps them down, and the hands are fond of her; lose her over the side in a blow and the old hands expect the worst. The chandler sells a ratting terrier, a milch goat and hens (milk and eggs for the sick: they want the pens) and a parrot, and will smoke the hold for you. Tap an animal in Life aboard to see how it is.' },
   { id: 'officers', area: 'ship', title: 'Officers', text: 'A sailing master, gunner, surgeon, quartermaster, boatswain, navigator and more, each with skills, values, friends, rivals and a story that can come to a head. Each learns a perk a level (chosen on the captain\'s page). Taverns list who is looking for a berth; your first may come to you in the first week.' },
   { id: 'vote', area: 'ship', title: 'The vote and mutiny', text: 'Now and then the company votes on the course, as the articles allowed. Muttering in the forecastle warns you when confidence falls. Break a voted course, or starve them, and a mutiny is a scene you play.' },
   { id: 'prisoners', area: 'ship', title: 'Prisoners and the court', text: 'A captured captain can be ransomed, released, marooned, or tried before the crew: hear his men, read his papers, pass sentence. The crew judge your verdict by what they heard.' },
@@ -54201,6 +55155,9 @@ const { canFound } = __m_src_core_tradehouse_js;
 const { QUALITIES, qOf, ENDED } = __m_src_core_qualities_js;
 const { belt } = __m_src_core_kit_js;
 const { kl } = __m_src_core_keys_js;
+const { moments } = __m_src_core_shipboard_js;
+const { talkBelow } = __m_src_core_grievance_js;
+const { zoo } = __m_src_core_animals_js;
 const sea = (g) => g.state.mode === 'sea' && !!g.player && !g.state.shore;
 const port = (g) => g.state.mode === 'port' && g.state.dockedAt != null;
 const fought = (g) => (orderdeck.deckState(g.state).max || 0) > 0;
@@ -54231,6 +55188,15 @@ const HINTS = [
     text: () => `An officer has learned something and has a perk to choose. The captain's page (${kl('captain')}), under Officers.` },
   { id: 'qualities', guide: 'qualities', title: 'Qualities', when: (g) => Object.keys(QUALITIES).some((k) => !k.startsWith('s_') && qOf(g.state, k) > 0 && qOf(g.state, k) !== ENDED),
     text: () => `Something you did has left a mark: a quality on the captain's page (${kl('captain')}), with what it is watching for. The long stories read them.` },
+  // 3.5: the forecastle.
+  { id: 'mind', guide: 'thoughts', title: 'What a man has on his mind', when: (g, c) => c.screen === 'aboard' && !g.state.tutorial,
+    text: () => 'Click one of the hands to see what is on his mind, in his own words, and who he messes with. Strain always has its reasons.' },
+  { id: 'mess', guide: 'messes', title: 'Messes', when: (g) => sea(g) && moments(g.state).some((m) => m.kind === 'mess'),
+    text: () => `A man has asked to change mess. Every hand eats with the same few men at every meal; they stand by each other. Life aboard (${kl('aboard')}) has him waiting for your word.` },
+  { id: 'talk', guide: 'talk', title: 'Talk below', when: (g) => sea(g) && (talkBelow(g)?.n || 0) >= 3,
+    text: () => `There is talk in the forecastle, and it is spreading man to man. Life aboard (${kl('aboard')}) says who started it and how far it has gone. A word in time, to the right man, stops it.` },
+  { id: 'rats', guide: 'animals', title: 'Rats', when: (g) => (zoo(g.state).rats || 0) >= 30,
+    text: () => 'The rats are into the bread. The ship\'s cat does what she can; the chandler sells a terrier, and will smoke the hold.' },
   // In port.
   { id: 'matters', guide: 'stories', title: 'A matter in the town', when: (g) => port(g) && portMatters(g).length > 0,
     text: () => 'A matter waits for you in the town: the first step of a long story that remembers what you choose. The town tab has it.' },
@@ -54336,6 +55302,12 @@ const damage = __m_src_core_damage_js;
 const behaviour = __m_src_core_behaviour_js;
 const prisoners = __m_src_core_prisoners_js;
 const crewlife = __m_src_core_crewlife_js;
+const thoughtsMod = __m_src_core_thoughts_js;
+const messesMod = __m_src_core_messes_js;
+const grievanceMod = __m_src_core_grievance_js;
+const animalsMod = __m_src_core_animals_js;
+const tiesMod = __m_src_core_ties_js;
+const { CAUSES: CAUSE_WORDS, ANIMALS } = __m_src_data_thoughts_js;
 const { SHOT_IDS } = __m_src_core_damage_js;
 const { ARMS, APPAREL, RANKS, STATIONS: CREW_STATIONS, STATION_IDS: CREW_STATION_IDS, SAILOR_TRAITS, AFFLICTIONS, VIRTUES, MAIMS, armsLabel, CAPTAIN_PLACES } = __m_src_data_crew_js;
 const { CAPTAIN_MAIMS } = __m_src_core_legacy_js;
@@ -55928,6 +56900,8 @@ function portScreen() {
       <div class="table-wrap"><table class="market"><tr><th>Good</th><th class="num">Stock</th><th class="num">Buy</th><th class="num">Sell</th><th class="num">Held</th><th title="The best prices you remember from other towns, and how old they are (hover)">Elsewhere, as you remember it</th><th></th></tr>${rows}</table></div>
       <h3>The chandler <small class="muted">for the ${esc(p.name)}</small></h3><p class="muted" style="margin-top:0">${esc(storesSummary())}</p>
       <div class="gear-row">${Object.entries(storesMod.CHANDLERY).map(([id, G]) => { const have = storesMod.hasGear(p, id); return `<div class="gear${have ? ' have' : ''}"><b>${esc(G.name)}</b><small>${esc(G.desc)}</small>${have ? '<small class="cheap">Aboard.</small>' : `<button class="btn small" data-gear="${id}">${fmt(storesMod.gearCost(p, id))} gold</button>`}</div>`; }).join('')}</div>
+      <h4 style="margin:10px 0 4px">The ship's other company <small class="muted">(rats in the hold: ${esc(animalsMod.ratWords(animalsMod.zoo(st).rats))})</small></h4>
+      <div class="gear-row">${Object.entries(ANIMALS).filter(([k]) => k !== 'cat').map(([k, A]) => { const n = animalsMod.living(st).filter((x) => x.kind === k).length; return `<div class="gear${n ? ' have' : ''}"><b>${esc(A.name)}</b><small>${esc(A.desc)}</small><button class="btn small" data-beast="${k}">${n ? 'Another' : 'Buy'} (${fmt(A.cost)})</button></div>`; }).join('')}<div class="gear"><b>Smoke the hold</b><small>Sulphur and wet straw, hatches battened: every rat aboard dead by evening.</small><button class="btn small" id="pt-smoke">Smoke her (${fmt(animalsMod.smokeCost(game))})</button></div></div>
       <h4 style="margin:10px 0 4px">For a fight <small class="muted">(keys ${BELT_IDS.map((id) => BELT[id].key).join(', ')} at sea)</small></h4>
       <div class="gear-row">${BELT_IDS.map((id) => { const have = kitMod.belt(st)[id] || 0, B = BELT[id]; return `<div class="gear${have >= B.max ? ' have' : ''}"><b>${esc(B.name)}</b> <small class="muted">${have}/${B.max} · key ${B.key}</small><small>${esc(B.desc)}</small>${have >= B.max ? '<small class="cheap">As many as you can stow.</small>' : `<button class="btn small" data-belt-buy="${id}">${fmt(B.cost)} gold</button>`}</div>`; }).join('')}</div>
       ${hotHtml(isl)}`;
@@ -56106,6 +57080,8 @@ function portScreen() {
   on('[data-newstab]', 'click', (e) => { const t = e.currentTarget.dataset.newstab; if (t === 'log') { setScreen('sheet'); sheetScreen(); setTimeout(() => document.getElementById('letters')?.scrollIntoView({ behavior: 'smooth' }), 50); return; } portTab = t; portNotice = null; townTalk = null; portScreen(); });
   on('[data-belt-buy]', 'click', (e) => result(kitMod.buyBelt(game, e.currentTarget.dataset.beltBuy), (r) => `${BELT[e.currentTarget.dataset.beltBuy].name}: ${r.n} more, for ${fmt(r.cost)} gold.`));
   on('[data-gear]', 'click', (e) => result(storesMod.buyGear(game, e.currentTarget.dataset.gear), (r) => `${r.name}: aboard, for ${fmt(r.cost)} gold.`));
+  on('[data-beast]', 'click', (e) => result(animalsMod.buyAnimal(game, e.currentTarget.dataset.beast), (r) => r.text));
+  on('#pt-smoke', 'click', () => result(animalsMod.smokeHold(game), (r) => r.text));
   on('#hot-launder', 'click', () => result(hotcargo.launder(game), (r) => r.text));
   on('#hot-papers', 'click', () => result(hotcargo.buyPapers(game), (r) => r.text));
   on('[data-invest]', 'click', (e) => { const r = townsMod.invest(game, e.currentTarget.dataset.invest); drainEvents(); result(r, (x) => x.text); });
@@ -58100,7 +59076,7 @@ function doInteract() {
 }
 
 // ---------- the crew (D1, C1, G1, D7, D4, C3, C4) ----------
-let crewTab = 'roster', crewShip = null, crewBack = null;
+let crewTab = 'roster', crewShip = null, crewBack = null; let crewSort = 'rank'; // 3.5: by rank, by mess or by strain
 function crewScreen(tab) {
   if (!game) return;
   if (tab) crewTab = tab;
@@ -58121,7 +59097,10 @@ function crewScreen(tab) {
   };
   const grenSel = (have, attr) => { const most = Math.min(crew.POUCH_MAX, have + (a.grenade || 0)); return most > 0 ? sel(Array.from({ length: most + 1 }, (_, i) => [String(i), String(i)]), String(have), attr) : '<span class="muted">—</span>'; };
   if (crewTab === 'roster') {
-    const list = crew.aboard(st, crewShip).sort((x, y) => crew.RANK_ORDER.indexOf(y.rank) - crew.RANK_ORDER.indexOf(x.rank) || y.xp - x.xp);
+    messesMod.settleMesses(game);
+    const byRank = (x, y) => crew.RANK_ORDER.indexOf(y.rank) - crew.RANK_ORDER.indexOf(x.rank) || y.xp - x.xp;
+    const messNo = (q) => messesMod.messById(st, q.mess)?.no ?? 999;
+    const list = crew.aboard(st, crewShip).sort(crewSort === 'mess' ? (x, y) => messNo(x) - messNo(y) || byRank(x, y) : crewSort === 'strain' ? (x, y) => (y.stress || 0) - (x.stress || 0) : byRank);
     const fx = crew.crewFx(st);
     const spk = crewlife.spokesman(st);
     const regardWord = (n) => (n >= 40 ? 'speaks well of you' : n >= 10 ? 'is content' : n > -10 ? 'reserves judgement' : n > -40 ? 'is unhappy with you' : 'is turning the crew against you');
@@ -58129,13 +59108,15 @@ function crewScreen(tab) {
     const social = `<div class="crew-social">${spk ? `<span><b>Spokesman:</b> ${esc(crew.displayName(spk.person))}, who ${regardWord(spk.regard)}.</span>` : ''}${facs.length ? `<span><b>Below decks, across the fleet:</b> ${facs.map((f) => `<span class="chip" title="Cares about ${esc(f.cares)}. Average strain ${f.mood}.">${esc(f.name)} ${f.n}</span>`).join(' ')}</span>` : ''}</div>`;
     body = `${social}<div class="row" style="flex-wrap:wrap;gap:8px">${ships.length > 1 ? sel(ships.map((x) => [String(x.id), `${x.name} (${x.crew})`]), String(crewShip), 'id="cr-ship"') : ''}
       <span>${list.length} aboard · gun crews ${fmt(Math.round((2 - fx.reload) * 100))}% · aloft ${fmt(Math.round(fx.sail * 100))}% · boarding ${fmt(Math.round(fx.board * 100))}%</span><span class="spacer"></span>
+      ${sel([['rank', 'By rank'], ['mess', 'By mess'], ['strain', 'By strain']], crewSort, 'id="cr-sort" aria-label="Sort the crew"')}
       <button class="btn small" id="cr-issue" title="Hand out the best arms in the chest, boarders first, and two grenadoes to each boarder">Issue arms</button><button class="btn small ghost" id="cr-watch" title="Assign stations by skill">Set the watch bill</button></div>
-      <div class="crew-scroll" style="margin-top:8px"><table class="crew-table"><tr><th>Name</th><th>Rank</th><th>Station</th><th title="Seamanship / gunnery / hand to hand">Sea·Gun·Fight</th><th>Blade</th><th>Firearm</th><th title="Grenadoes in the pouch, thrown first when boarding (up to 3)">Grenadoes</th><th>Strain</th><th></th></tr>
+      <div class="crew-scroll" style="margin-top:8px"><table class="crew-table"><tr><th>Name</th><th>Rank</th><th title="Who he eats with">Mess</th><th>Station</th><th title="Seamanship / gunnery / hand to hand">Sea·Gun·Fight</th><th>Blade</th><th>Firearm</th><th title="Grenadoes in the pouch, thrown first when boarding (up to 3)">Grenadoes</th><th>Strain</th><th></th></tr>
       ${list.map((q) => {
         const cond = q.cond ? `<span class="cond ${AFFLICTIONS[q.cond] ? 'bad' : 'good'}" title="${esc((AFFLICTIONS[q.cond] || VIRTUES[q.cond]).desc)}">${(AFFLICTIONS[q.cond] || VIRTUES[q.cond]).name}</span>` : '';
         const maims = (q.maims || []).map((m) => `<span class="cond bad" title="${esc(MAIMS[m].desc)}">${MAIMS[m].name}</span>`).join(' ');
         return `<tr><td title="${esc(`From ${q.home}. ${SAILOR_TRAITS[q.trait]?.name}: ${SAILOR_TRAITS[q.trait]?.desc} ${q.battles} fights, ${q.kills || 0} enemies downed.${q.from ? ` Joined from the ${q.from}.` : ''}${q.past?.known ? ` ${historyMod.pastText(game, q) || ''}` : ''}`)}"><b>${esc(crew.displayName(q))}</b>${q.past?.known ? ' <small class="muted" title="You know something of their past">✦</small>' : ''} <button class="link" data-rename-person="${q.id}" title="Rename, or give a nickname">✎</button>${spk?.person === q ? ' <span class="tag" title="The crew\'s spokesman">⚑</span>' : ''} <small class="muted">${esc(SAILOR_TRAITS[q.trait]?.name || '')}</small> ${maims} ${cond}${(() => { const w = crewlife.bondWords(st, q); return w.length ? `<br><small class="bond">${esc(w.join('; '))}</small>` : ''; })()}</td>
           <td><small>${RANKS[q.rank].name}</small></td>
+          <td class="mess-cell" title="${esc(messesMod.messLabel(st, messesMod.messById(st, q.mess)))}">${q.mess ? `No. ${messesMod.messById(st, q.mess)?.no ?? '?'}` : '—'}${q.griev?.n >= 35 ? ' <span class="cond bad" title="Sore, and talking">talking</span>' : ''}</td>
           <td>${sel(CREW_STATION_IDS.map((k) => [k, CREW_STATIONS[k].name]), q.station, `data-station="${q.id}"`)}</td>
           <td>${crew.effSkill(q, 'sea')}·${crew.effSkill(q, 'gun')}·${crew.effSkill(q, 'fight')}</td>
           <td>${sel(armsOpts('melee', q.kit.melee || 'knife'), q.kit.melee || 'knife', `data-melee="${q.id}"`)}</td>
@@ -58186,6 +59167,7 @@ function crewScreen(tab) {
   on('[data-ctab]', 'click', (e) => { crewTab = e.currentTarget.dataset.ctab; crewScreen(); });
   on('#cr-close', 'click', closeCrew);
   on('#cr-ship', 'change', (e) => { crewShip = +e.target.value; crewScreen(); });
+  on('#cr-sort', 'change', (e) => { crewSort = e.target.value; crewScreen(); });
   on('#cr-issue', 'click', () => { const r = crew.issueArms(game); toast(`${r.n} weapons handed out.`, 'info'); crewScreen(); });
   on('#cr-watch', 'click', () => { crew.autoStations(game, crewShip); crewScreen(); });
   on('[data-station]', 'change', (e) => redo(crew.setStation(game, +e.target.dataset.station, e.target.value)));
@@ -58879,13 +59861,14 @@ function aboardScreen(pick = undefined, result = null, fresh = false) {
   aboardView.result = result;
   setScreen('aboard');
   const st = game.state, ship = game.player;
+  animalsMod.ensureCat(game); // 3.5
   const R = shipboard.routine(game, ship);
   const M = shipboard.moments(st);
   const alerts = new Set(M.flatMap((m) => m.who)), oalerts = new Set(M.flatMap((m) => [m.oid, m.oid2].filter((x) => x != null)));
   const people = {};
   for (const g of R.groups) for (const id of g.ids) { const q = crew.personById(st, id); if (q) people[id] = { name: crew.displayName(q), station: q.station }; }
   const offs = R.officers.map((x) => ({ id: x.o.id, name: x.o.name, title: OFFICER_ROLES[x.o.role]?.name || x.o.role, place: x.place, asleep: x.asleep, ofw: x.ofw }));
-  const svg = cutawaySvg(ship, { livery: game.state.livery?.color, cargo: { used: cargoUsed(ship), cap: shipStats(ship).cargo }, routine: { groups: R.groups, people, officers: offs, captain: { name: st.captain.name }, alerts, oalerts, dark: daytime.darkness(st), sel: aboardView.sel } });
+  const svg = cutawaySvg(ship, { livery: game.state.livery?.color, cargo: { used: cargoUsed(ship), cap: shipStats(ship).cargo }, routine: { groups: R.groups, people, officers: offs, captain: { name: st.captain.name }, alerts, oalerts, dark: daytime.darkness(st), sel: aboardView.sel, animals: animalsMod.living(st).map((a) => ({ id: a.id, kind: a.kind, name: a.name })) } });
   const W = R.watch, sel = aboardView.sel, L = shipboard.life(st);
   const res = aboardView.result ? `<div class="notice ${aboardView.result.kind || ''}">${esc(voice(aboardView.result.text || ''))}${aboardView.result.reacts?.length ? `<br><small>${esc(aboardView.result.reacts.join('; '))}.</small>` : ''}${aboardView.result.lines?.length ? `<ul class="plain">${aboardView.result.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}</div>` : '';
   const pImg = (q, w = 52, h = 62) => portraitImg(withMood(lookOf('p', q), moodOfStress(q.stress || 0)), w, h);
@@ -58922,8 +59905,20 @@ function aboardScreen(pick = undefined, result = null, fresh = false) {
       shipboard.ensureWant(game, q);
       const w = q.want, m = shipboard.momentFor(st, q.id), now = shipboard.doing(game, q.id);
       const bw = crewlife.bondWords(st, q);
+      game.tutorialEvent('look-man'); // 3.5: the first voyage's "Look at a man"
+      messesMod.settleMesses(game);
+      const th = thoughtsMod.thoughtsOf(game, q, 3), mess = messesMod.messById(st, q.mess);
+      const mates = mess ? messesMod.membersOf(st, mess).filter((x) => x.id !== q.id) : [];
+      const otherMesses = messesMod.messes(st).filter((x) => x.shipId === q.shipId && x.id !== q.mess && messesMod.membersOf(st, x).length < messesMod.MESS_MAX);
+      const gv = q.griev, told = grievanceMod.listenersOf(st, q), from = gv?.from != null ? crew.personById(st, gv.from) : null;
+      const mind = `<div class="mind"><h4>On ${q.female ? 'her' : 'his'} mind</h4>${th.length ? `<ul class="thoughts">${th.map((t) => `<li class="${t.good ? 'good' : 'bad'}">“${esc(t.text)}”${t.own ? '' : ' <small class="muted">(the whole crew)</small>'}</li>`).join('')}</ul>` : '<p class="muted">Nothing much. The work, the weather.</p>'}
+        ${gv && gv.n >= 20 ? `<p class="talk-line"><b>Sore:</b> says ${gv.n >= 50 ? 'loudly' : 'quietly'} that ${esc(CAUSE_WORDS[gv.k] || 'things are wrong')}${from ? `, as ${esc(crew.displayName(from))} told ${q.female ? 'her' : 'him'}` : ''}.${told.length ? ` ${q.female ? 'She' : 'He'} has told ${esc(told.slice(0, 3).map((x) => crew.displayName(x)).join(', '))}${told.length > 3 ? ` and ${told.length - 3} more` : ''}.` : ''}</p>` : ''}
+        ${(q.changed || []).length ? `<p class="muted"><small>${esc(thoughtsMod.changesOf(q).join('; '))}.</small></p>` : ''}
+        <p><b>Mess:</b> ${esc(messesMod.messLabel(st, mess))}${mates.length ? `, with ${esc(mates.slice(0, 4).map((x) => crew.displayName(x)).join(', '))}${mates.length > 4 ? ` and ${mates.length - 4} more` : ''}` : ''}. <b>Watch:</b> ${esc(tiesMod.watchOf(q))}.</p>
+        <div class="row wrap mind-acts">${otherMesses.length ? `<select id="ab-mess" aria-label="Move him to another mess"><option value="">Move to another mess…</option>${otherMesses.map((x) => `<option value="${x.id}">${esc(messesMod.messLabel(st, x))} (${messesMod.membersOf(st, x).length})</option>`).join('')}</select>` : ''}<button class="btn small ghost" id="ab-watch">To the ${esc(tiesMod.otherWatch(q))} watch</button>${gv && gv.n >= 20 ? `<button class="btn small" id="ab-answer">Hear him out</button>` : ''}</div></div>`;
       side = `<div class="person-head">${pImg(q, 80, 96)}<div><h3>${esc(crew.displayName(q))}</h3><p>${esc(RANKS[q.rank]?.name || '')}, ${esc((CREW_STATIONS[q.station]?.name || q.station).toLowerCase())}${q.status === 'sick' ? ' (in the sick bay)' : ''}. ${q.age ? `Aged ${q.age}, f` : 'F'}rom ${esc(q.home || 'somewhere')}; ${Math.max(0, st.day - (q.joined ?? st.day))} days aboard, ${q.battles || 0} fights.</p><p class="muted">Temperament: <b>${esc(SAILOR_TRAITS[q.trait]?.name || 'steady')}</b>. ${esc(SAILOR_TRAITS[q.trait]?.desc || '')}</p></div></div>
         <div class="stat-bars"><span>Strain</span>${barHtml(q.stress || 0, (q.stress || 0) >= 70 ? 'bad' : (q.stress || 0) >= 45 ? 'short' : '')}<b>${Math.round(q.stress || 0)}</b></div>
+        ${mind}
         ${q.cond ? `<p><b>${esc((AFFLICTIONS[q.cond] || VIRTUES[q.cond])?.name || q.cond)}</b>: ${esc((AFFLICTIONS[q.cond] || VIRTUES[q.cond])?.desc || '')}</p>` : ''}
         ${q.injury ? `<p><b>${esc(q.injury.name)}</b>, ${q.injury.days} more days.</p>` : ''}
         <p><b>Now:</b> ${esc(now || 'about the ship')}.</p>
@@ -58941,8 +59936,20 @@ function aboardScreen(pick = undefined, result = null, fresh = false) {
       ${M.length ? `<div class="moments">${M.map((m) => momentCard(m)).join('')}</div>` : '<p class="muted">Nobody, just now. Things come up most days; leave them, and your first officer sees to them.</p>'}
       <h3>Your officers</h3>
       ${offList.length ? `<div class="officer-list">${offList.map((o) => { const Rr = R.officers.find((x) => x.o === o); shipboard.ensureOfficer(game, o); return `<button class="officer-row" data-aboard-off="${o.id}">${oImg(o, 40, 48)}<span><b>${esc(o.name)}</b>${L.first === o.id ? ' <span class="tag">first</span>' : ''}${oalerts.has(o.id) ? ' <span class="tag warn">!</span>' : ''}<small>${esc(OFFICER_ROLES[o.role]?.name || '')} · ${esc(Rr?.asleep ? 'asleep' : Rr?.doing || '')}</small><span class="stat-bars inline">${barHtml(o.loyalty, o.loyalty < 35 ? 'bad' : '')}</span></span></button>`; }).join('')}</div>` : '<p class="muted">You have no officers. Hire them in a tavern; until then the boatswain\'s mates and you run the ship between you.</p>'}
+      ${talkBelowHtml()}
+      ${companyHtml()}
       <h3>The captain's hours</h3>${captainHours()}
       ${L.log.length ? `<h3>Lately aboard</h3><div class="log-list">${L.log.slice(-6).reverse().map((l) => `<div><small class="muted">Day ${l.day}:</small> ${esc(l.text)}</div>`).join('')}</div>` : ''}`;
+  }
+  // 3.5: the talk below, as far as an officer would know it, and the ship's other company.
+  function talkBelowHtml() {
+    const T = grievanceMod.talkBelow(game);
+    if (!T) return '';
+    return `<h3>Talk below</h3><p class="talk-line">${T.n} of ${T.of} are saying ${esc(T.words)}. It started with <button class="link" data-talk="${(T.started || T.ringleader).id}">${esc(crew.displayName(T.started || T.ringleader))}</button>${T.ringleader && T.started && T.ringleader.id !== T.started.id ? `; they listen to <button class="link" data-talk="${T.ringleader.id}">${esc(crew.displayName(T.ringleader))}</button> now` : ''}.${T.held.length ? ` It has not reached ${esc(T.held.slice(0, 2).join(' or '))}.` : ' Every mess has heard it.'}</p>`;
+  }
+  function companyHtml() {
+    const list = animalsMod.living(st), rats = animalsMod.zoo(st).rats;
+    return `<h3>The ship's other company</h3><p>${list.length ? list.map((a) => `<button class="link" data-animalpick="${a.id}">${esc(animalsMod.animalWords(st, a))}</button>`).join('; ') : 'No animals aboard.'}. <span class="muted">Rats: ${esc(animalsMod.ratWords(rats))}.</span></p>`;
   }
   function captainHours() {
     return `<div class="row wrap"><button class="btn small" id="ab-stores">Inspect the stores</button><button class="btn small" id="ab-walk" ${L.walked === st.day ? 'disabled' : ''}>Walk the deck</button><button class="btn small" id="ab-tot" title="A double tot for every hand: rum from the hold, or the purser's at a price">Splice the main brace</button>${st.mode === 'sea' ? '<button class="btn small" id="ab-route">Plan the route</button>' : ''}</div>`;
@@ -58983,6 +59990,20 @@ function aboardScreen(pick = undefined, result = null, fresh = false) {
   on('#ab-tot', 'click', () => { const r = shipboard.spliceBrace(game); if (r.ok) sfx.coins?.(); again(undefined, { kind: r.ok ? 'good' : 'bad', text: r.ok ? r.text : r.err }); });
   on('#ab-route', 'click', () => mapScreen());
   on('#ab-speak', 'click', () => { const q = crew.personById(st, sel?.id); if (q) again(undefined, { kind: 'info', text: shipboard.speak(game, q) }); });
+  on('#ab-mess', 'change', (e) => { if (!e.target.value) return; const r = messesMod.moveToMess(game, sel.id, +e.target.value); again(undefined, { kind: r.ok ? 'info' : 'bad', text: r.ok ? `${r.text} He did not ask to.` : r.err }); });
+  on('#ab-watch', 'click', () => { const r = grievanceMod.moveWatch(game, sel.id); again(undefined, { kind: r.ok ? 'info' : 'bad', text: r.ok ? r.text : r.err }); });
+  on('#ab-answer', 'click', () => { const r = grievanceMod.answerTalker(game, sel.id); again(undefined, { kind: r.ok && r.good ? 'good' : r.ok ? 'bad' : 'bad', text: r.ok ? r.text : r.err }); });
+  on('.cutaway [data-animal]', 'click', (e) => again(undefined, { kind: 'info', text: animalLine(+e.currentTarget.dataset.animal) }));
+  on('[data-animalpick]', 'click', (e) => again(undefined, { kind: 'info', text: animalLine(+e.currentTarget.dataset.animalpick) }));
+  on('[data-talk]', 'click', (e) => again({ kind: 'person', id: +e.currentTarget.dataset.talk }));
+  function animalLine(id) {
+    const a = animalsMod.living(st).find((x) => x.id === id);
+    if (!a) return 'Gone.';
+    const keeper = a.keeper != null ? crew.personById(st, a.keeper) : null;
+    const k = keeper && keeper.status === 'aboard' ? ` ${crew.displayName(keeper)} looks after ${a.kind === 'hens' ? 'them' : a.female ? 'her' : 'him'}.` : '';
+    if (a.kind === 'cat') return `${a.name} regards you from the top of the bread barrel, then goes back to washing ${a.female ? 'her' : 'his'} paws. The rats are ${animalsMod.ratWords(animalsMod.zoo(st).rats)}.${k}`;
+    return `${animalsMod.animalWords(st, a)}. ${ANIMALS[a.kind]?.desc || ''}${k}`;
+  }
   on('[data-aotopic]', 'click', (e) => { const r = talkMod.officerTalk(game, sel.id, e.currentTarget.dataset.aotopic); again(undefined, { kind: 'info', text: r.ok ? r.text : r.err }); });
   on('[data-aoc]', 'click', (e) => { const r = game.chainChoose('officer', sel.id, e.currentTarget.dataset.aoc); drainEvents(); again(undefined, { kind: 'info', text: r.text || r.err || '', lines: r.lines }); });
   on('#ab-first', 'click', () => { const r = shipboard.makeFirst(game, sel.id); again(undefined, { kind: r.ok ? 'good' : 'bad', text: r.ok ? r.text : r.err }); });
@@ -60502,6 +61523,9 @@ window.__brine = {
     quest: (spec, ref = { type: 'world', id: 'test', title: 'A test' }) => story.stories.startQuest(game, spec, ref), // 3.1
     questDone: () => { maybeQuestDone(); return screen; },
     keyLabel: (a) => kl(a), // 3.2
+    // 3.5: the forecastle. Give n men a grievance, the first of them the talker.
+    aggrieve: (n = 6, k = 'share') => { const crewNow = crew.aboard(game.state, game.player.id).slice(0, n); crewNow.forEach((q, i) => { grievanceMod.aggrieve(game, q, k, i === 0 ? 80 : 45, i === 0 ? null : crewNow[0].id); }); if (crewNow[0]) crewNow[0].told = n - 1; return crewNow.map((q) => q.id); },
+    forecastle: () => ({ messes: messesMod.messes(game.state).length, cat: animalsMod.theCat(game.state)?.name || null, rats: Math.round(animalsMod.zoo(game.state).rats), talk: grievanceMod.talkBelow(game)?.n || 0 }),
     shoreLandmark: () => { const sh = game.state.shore; if (!sh) return null; const m = shoreMod.mapOf(game, sh.islandId); const l = m.lm.find((q) => survey.anchorAt(game, sh.islandId, q.x, q.y) && !(q.x === sh.x && q.y === sh.y)); return l ? { x: l.x, y: l.y, N: m.N, name: l.name } : null; }, // 3.3
     firstMate: () => { game.state.firstMate = null; game.state.officers = []; game.state.commandDay = game.state.day - 3; const r = firstMateMod.firstMateDaily(game); drainEvents(); return r; },
     hint: (id) => { const h = hintsMod.HINT_BY_ID[id]; if (!h) return null; hintAt = -1e9; showHint({ id, title: h.title, text: h.text(game), guide: h.guide }); return id; },

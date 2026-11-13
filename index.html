@@ -43634,7 +43634,7 @@ const HASTEN = 4;               // time runs this many times faster while hasten
 const NEAR_RANGE = 3600;                  // beyond this, NPCs use cheap abstract movement
 const POPULATION = { merchant: 16, patrol: 8, pirate: 7 }; // pirates: set by the difficulty preset
 const SAVE_VERSION = 9;
-const GAME_VERSION = '3.5.4'; // shown on the main menu
+const GAME_VERSION = '3.5.5'; // shown on the main menu
 
 function cargoValue(cargo) { return Object.entries(cargo || {}).reduce((a, [g, q]) => a + (GOODS[g]?.base || 0) * q, 0); }
 
@@ -50651,11 +50651,13 @@ function prep(song, part) {
 }
 
 // Arrange a song. Returns { events, lines, length } with times in seconds from the start.
-// opts.form: 'full' (default) or 'short'; opts.voices: how many crew sing (2–8).
+// opts.form: 'full' (default), 'called' (3.5.5: the whole song, every verse, but struck up at once by
+// the shantyman, without the band's opening; for a song the captain calls for) or 'short'; opts.voices:
+// how many crew sing (2–8).
 function arrange(idOrSong, opts = {}) {
   const song = typeof idOrSong === 'string' ? SHANTIES[idOrSong] : idOrSong;
   const crew = Math.max(2, Math.min(8, opts.voices ?? 6));
-  const form = opts.form === 'short' ? song.short : song.form;
+  const form = opts.form === 'short' ? song.short : opts.form === 'called' ? song.form.filter((x, i) => !(i === 0 && x.startsWith('intro'))) : song.form;
   const barLen = BAR[song.meter];
   const verse = prep(song, song.verse);
   const chorus = song.chorus ? prep(song, song.chorus) : null;
@@ -50806,7 +50808,8 @@ const __m_src_data_scores_js = (() => {
 //   greensleeves the traditional tune (16th century; sung in The Beggar's Opera, 1728) with the
 //               usual chords.
 //   canon       Pachelbel's Canon in D (c. 1680-1700): his ground and the first entries of the
-//               violin line, played as a canon in three voices, as he wrote it; shortened.
+//               violin line, played as a canon in three voices, as he wrote it; shortened (the
+//               opening variations only), and since 3.5.5 played through twice.
 //   prelude     the Prelude in C from Bach's Well-Tempered Clavier, Book I (1722): the harmony of
 //               bars 1-32, in his figure; the closing bars are simplified to a held chord.
 //   folia       La Folia, the dance-tune ground every composer of the age set variations on (Corelli
@@ -50818,6 +50821,8 @@ const __m_src_data_scores_js = (() => {
 // '|' between bars; chords one per bar, or split evenly with '-'.
 // `moods`: where the piece may play. `scorings`: the instruments it may be played on, one chosen
 // each time (`gain` evens out the loudness of a quiet consort). Tempo is in eighths a minute; `forms` and `tempos` can differ by mood.
+// `passes` (3.5.5, the owner asked for the music at full length): how many times the whole form is
+// played, the second time on the next scoring; a number, or by mood.
 
 const MOODS = {
   sailing: 'Fair weather at sea',
@@ -50870,6 +50875,7 @@ const SCORES = {
       },
     },
     form: ['verse', 'chorus', 'verse', 'chorus'],
+    passes: 2,
     scorings: [
       { lead: 'recorder', fill: 'lute', fillStyle: 'arp', bass: 'cello' },
       { lead: 'violin', fill: 'lute', fillStyle: 'arp', bass: 'cello' },
@@ -50894,6 +50900,7 @@ const SCORES = {
         'F#5:2 E5:2 D5:2 C#5:2 | B4:2 A4:2 B4:2 C#5:2',
       ],
       end: 'D',
+      times: 2,
     },
     scorings: [
       { lead: 'violin', bass: 'cello', fill: 'harpsichord', fillStyle: 'continuo' },
@@ -50956,6 +50963,7 @@ const SCORES = {
     },
     form: ['B', 'C', 'A', 'C'],
     forms: { combat: ['B', 'C', 'A', 'C'], storm: ['C', 'B', 'C'] },
+    passes: 2,
     scorings: [
       { lead: 'violin', second: 'violin', bass: 'cello', bassStyle: 'drive', fill: 'harpsichord', fillStyle: 'continuo', drums: 'timpani' },
       { lead: 'violin', bass: 'cello', bassStyle: 'drive', fill: 'harpsichord', fillStyle: 'block', drums: 'timpani' },
@@ -50976,6 +50984,7 @@ const SCORES = {
     },
     form: ['ground', 'first', 'second'],
     forms: { fog: ['ground', 'first'], night: ['first', 'second'] },
+    passes: 2,
     scorings: [
       { lead: 'violin', bass: 'cello', fill: 'pad', fillStyle: 'pad' },
       { lead: 'cello', bass: 'cello', fill: 'lute', fillStyle: 'arp', octave: -12 },
@@ -51033,15 +51042,21 @@ function arrangePiece(id, opts = {}) {
   if (!piece) throw new Error(`No piece "${id}"`);
   const rand = opts.rand || Math.random;
   const si = opts.scoring ?? Math.floor(rand() * piece.scorings.length);
-  const S = piece.scorings[Math.max(0, Math.min(piece.scorings.length - 1, si))];
+  const S0 = piece.scorings[Math.max(0, Math.min(piece.scorings.length - 1, si))];
+  // 3.5.5: a piece may be played through more than once ("passes", for every mood or by mood), the
+  // second time on the next of its scorings, as players of the time took a repeat on other instruments.
+  // The owner asked for the music at full length; most pieces now run two to three minutes.
+  const P = piece.passes, passes = Math.max(1, (typeof P === 'object' ? (P[opts.mood] ?? P.default) : P) || 1);
+  const scoringOf = (k) => piece.scorings[(Math.max(0, Math.min(piece.scorings.length - 1, si)) + k) % piece.scorings.length];
+  let S = S0;
   const tempo = piece.tempos?.[opts.mood] || piece.tempo;
   const sec = (60 / tempo) * (S.slow || 1);
   const barLen = BARS[piece.meter];
   const events = [];
   const human = (a) => (rand() * 2 - 1) * a;
-  const lead = S.lead, oct = S.octave || 0;
+  let lead = S.lead, oct = S.octave || 0, level = 1;
   // A recorder cannot go below its lowest note: such a passage goes up the octave, as a player would take it.
-  const push = (e) => { if (e.m != null && e.inst === 'recorder' && e.m < RANGE.recorder[0]) e.m += 12; if (e.m == null || Number.isFinite(e.m)) events.push(e); };
+  const push = (e) => { if (e.m != null && e.inst === 'recorder' && e.m < RANGE.recorder[0]) e.m += 12; if (level !== 1) e.vel *= level; if (e.m == null || Number.isFinite(e.m)) events.push(e); };
 
   // ---- the timeline: sections one after another (or the canon, or the prelude) ----
   let totalEighths = 0;
@@ -51049,7 +51064,7 @@ function arrangePiece(id, opts = {}) {
   if (piece.canon) {
     const C = piece.canon, gB = parseMelody(C.ground.bass), gC = parseChords(C.ground.chords, barLen);
     const lineNotes = []; let pos = 0;
-    for (const u of C.line) { const p = parseMelody(u); for (const n of p.notes) lineNotes.push({ ...n, start: n.start + pos }); pos += p.len; }
+    for (let k = 0; k < (C.times || 1); k++) for (const u of C.line) { const p = parseMelody(u); for (const n of p.notes) lineNotes.push({ ...n, start: n.start + pos }); pos += p.len; }
     const lineLen = pos, gLen = gC.bars * barLen;
     const total = C.intro * barLen + lineLen + (C.voices - 1) * C.delay * barLen;
     const reps = Math.ceil(total / gLen);
@@ -51065,10 +51080,10 @@ function arrangePiece(id, opts = {}) {
   } else {
     const form = piece.forms?.[opts.mood] || piece.form;
     const seen = {};
-    for (const name of form) {
+    for (let pass = 0; pass < passes; pass++) for (const name of form) {
       const s = sectionOf(piece, name);
       seen[name] = (seen[name] || 0) + 1;
-      segments.push({ kind: 'section', start: totalEighths, ...s, repeat: seen[name] > 1 });
+      segments.push({ kind: 'section', start: totalEighths, ...s, repeat: seen[name] > 1, pass });
       totalEighths += s.len;
     }
   }
@@ -51108,9 +51123,12 @@ function arrangePiece(id, opts = {}) {
       } else push({ t: at(from + c.start), inst, m: r, dur: span(from + c.start, c.dur) * 0.95, vel: 0.8 * dyn, pan: 0.1 });
     }
   };
-  const legato = lead === 'violin' || lead === 'cello' || lead === 'recorder' ? 0.95 : 0.85;
+  const legatoOf = (l) => (l === 'violin' || l === 'cello' || l === 'recorder' ? 0.95 : 0.85);
+  let legato = legatoOf(lead);
 
   for (const seg of segments) {
+    // Each pass on its own scoring, at the loudness of the first (a quiet consort is brought up to it).
+    if (seg.pass != null) { S = scoringOf(seg.pass); lead = S.lead; oct = S.octave || 0; legato = legatoOf(lead); level = (S.gain || 1) / (S0.gain || 1); }
     if (seg.kind === 'canon') {
       const pans = [-0.45, 0.45, 0];
       seg.voices.forEach((notes, v) => {
@@ -51170,7 +51188,7 @@ function arrangePiece(id, opts = {}) {
   }
   events.sort((a, b) => a.t - b.t);
   const length = at(totalEighths) + 3;
-  return { events, length, id, title: piece.title, credit: piece.credit, by: piece.by, year: piece.year, scoring: si, lead, gain: S.gain || 1 };
+  return { events, length, id, title: piece.title, credit: piece.credit, by: piece.by, year: piece.year, scoring: si, lead: S0.lead, gain: S0.gain || 1, passes };
 }
 
 // ---------- the moment ----------
@@ -51192,13 +51210,111 @@ function musicMood(game, screen = 'play') {
   if (dark > 0.6) return 'night';
   return 'sailing';
 }
-// How long a silence after a piece, in seconds, by mood: music marks the moment; it does not fill
-// every minute (the sea is the soundtrack between).
-const GAPS = { sailing: [25, 70], port: [6, 18], night: [35, 80], fog: [40, 90], combat: [0.5, 2], storm: [3, 8], lament: [9999, 9999], title: [4, 10] };
-// How fast to leave one mood for another (seconds of fade).
-const FADES = { combat: 1.2, storm: 2, lament: 1.5 };
+// How long a silence after a piece, in seconds, by mood: a breath of sea between pieces (3.5.5: shorter
+// than before, when the pieces were shorter and the silences longer than the music, which the owner
+// found stopping and starting). How the music moves between moods: core/musicplan.js.
+const GAPS = { sailing: [10, 28], port: [5, 14], night: [12, 30], fog: [12, 30], combat: [0.5, 1.5], storm: [3, 6], lament: [9999, 9999], title: [3, 6] };
+// (Kept for older callers; the fades are now core/musicplan.js's.)
+const FADES = { combat: 2.5, storm: 6, lament: 2.5 };
 
 return { BARS, RANGE, sectionOf, piecesFor, pickPiece, arrangePiece, musicMood, GAPS, FADES };
+})();
+
+// ---- src/core/musicplan.js ----
+const __m_src_core_musicplan_js = (() => {
+// What the music does from one second to the next (3.5.5; the owner: the music should "not jump, stop
+// and start so suddenly ... it is jarring during play"). Pure, so it is tested in node; ui/audio.js
+// carries out what it says and tells it when a piece begins and ends.
+//
+// The rules:
+//  - A mood must be asked for a while before it counts: a fight after a second, a death at once, the
+//    title at once, a storm after 5 seconds, anything else after 8, and out of a fight after 6. So a fog
+//    bank, a dusk, or a fight that flickers on and off does not throw the music about.
+//  - A piece that also suits the new mood plays on (the title's minuet goes on into the voyage).
+//  - Into a fight or a death: the piece fades over 2.5 seconds and the new one comes in under it.
+//  - Out of a fight: the fight's music fades over 6 seconds, and a breath of 10 to 16 follows.
+//  - Between the quiet moods (sailing, port, night, fog, storm, the title): a piece with less than
+//    40 seconds to go is let finish; a longer one fades over 6 seconds while the next fades in.
+//  - After a piece, a short silence (GAPS in core/score.js), then another for the mood.
+//  - The crew's songs come first: the music has faded as they began, and waits 8 seconds after them.
+//
+//   tick(mood, now, { singing, silent }) -> actions: { fade: seconds } (the piece now playing) and
+//   { start: id, mood, fadeIn: seconds }; the player answers a start with started(id, mood, length, now)
+//   and the end of a piece with ended(now).
+
+const { GAPS, pickPiece } = __m_src_core_score_js;
+const { SCORES } = __m_src_data_scores_js;
+const HOLD = { combat: 1, lament: 0, title: 0, storm: 5 };
+const HOLD_OTHER = 8, HOLD_FROM_FIGHT = 6, HOLD_SILENCE = 2;
+const FINISH_WITHIN = 40;
+const AFTER_SONG = 8;
+const loud = (m) => m === 'combat' || m === 'lament';
+
+class MusicPlan {
+  constructor(rand = Math.random) {
+    this.rand = rand;
+    this.settled = null;      // the mood the music is following
+    this.cand = null;         // the mood asked for lately, and since when
+    this.since = 0;
+    this.playing = null;      // { id, mood, ends }
+    this.nextAt = 0;          // no new piece before this
+    this.lastPiece = null;
+    this.songUntil = -99;     // when the crew last sang
+  }
+  gap(mood) { const [a, b] = GAPS[mood] || [10, 25]; return a + this.rand() * (b - a); }
+  hold(to, from) {
+    if (to == null) return HOLD_SILENCE;
+    if (from === 'combat' && to !== 'lament') return HOLD_FROM_FIGHT;
+    return HOLD[to] ?? HOLD_OTHER;
+  }
+  started(id, mood, length, now) { this.playing = { id, mood, ends: now + length }; this.lastPiece = id; }
+  ended(now) {
+    if (!this.playing) return;
+    const m = this.settled || this.playing.mood;
+    this.playing = null;
+    this.nextAt = now + this.gap(m);
+  }
+  // The piece was stopped by something else (a song, the listening list).
+  halt(now = 0, wait = 0) { this.playing = null; this.nextAt = Math.max(this.nextAt, now + wait); }
+
+  tick(asked, now, { singing = false, silent = false } = {}) {
+    const out = [];
+    // The mood is followed even while nothing may play, so the music is right when it may.
+    if (asked !== this.cand) { this.cand = asked; this.since = now; }
+    let changedFrom;
+    let changed = false;
+    if (this.cand !== this.settled && now - this.since >= this.hold(this.cand, this.settled)) { changedFrom = this.settled; this.settled = this.cand; changed = true; }
+    if (silent) { if (this.playing) { out.push({ fade: 0.6 }); this.playing = null; } return out; }
+    if (singing) { if (this.playing) { out.push({ fade: 2.5 }); this.playing = null; } this.songUntil = now; return out; }
+    if (changed) out.push(...this.change(changedFrom, this.settled, now));
+    const m = this.settled;
+    if (!this.playing && m && now >= this.nextAt && (now - this.songUntil >= AFTER_SONG || loud(m))) {
+      const id = pickPiece(m, this.lastPiece, this.rand);
+      if (id) out.push({ start: id, mood: m, fadeIn: m === 'combat' ? 0.8 : m === 'lament' ? 1.5 : 3 });
+    }
+    return out;
+  }
+
+  change(prev, mood, now) {
+    const P = this.playing;
+    if (!P) {
+      if (loud(mood)) this.nextAt = now;
+      else if (prev === 'combat') this.nextAt = Math.max(this.nextAt, now + 10 + this.rand() * 6);
+      else this.nextAt = Math.min(this.nextAt, now + 3);
+      return [];
+    }
+    if (mood == null) { this.playing = null; return [{ fade: 3 }]; }
+    const fits = !loud(mood) && !loud(P.mood) && (SCORES[P.id]?.moods || []).includes(mood);
+    if (fits) { P.mood = mood; return []; }
+    if (loud(mood)) { this.playing = null; this.nextAt = now + 0.8; return [{ fade: 2.5 }]; }
+    if (P.mood === 'combat') { this.playing = null; this.nextAt = now + 10 + this.rand() * 6; return [{ fade: 6 }]; }
+    if (P.ends - now <= FINISH_WITHIN) return []; // it finishes; the next piece is for the new mood
+    this.playing = null; this.nextAt = now + 3; // the next fades in as this one fades out
+    return [{ fade: 6 }];
+  }
+}
+
+return { HOLD, HOLD_OTHER, FINISH_WITHIN, AFTER_SONG, MusicPlan };
 })();
 
 // ---- src/ui/audio.js ----
@@ -51213,7 +51329,8 @@ const __m_src_ui_audio_js = (() => {
 
 const { makeRig, playEvent } = __m_src_ui_band_js;
 const { arrange } = __m_src_core_music_js;
-const { arrangePiece, pickPiece, GAPS, FADES } = __m_src_core_score_js;
+const { arrangePiece } = __m_src_core_score_js;
+const { MusicPlan } = __m_src_core_musicplan_js;
 const { SCORES: _SC } = __m_src_data_scores_js;
 let ctx = null, master = null, comp = null, sfxBus = null, seaBus = null, voiceBus = null, musicBus = null, verb = null, verbSend = null;
 let muted = false;
@@ -51503,15 +51620,18 @@ function playSong(id, opts = {}) {
   const arr = arrange(id, opts);
   const r = songRig();
   r.out.gain.cancelScheduledValues(ctx.currentTime); r.out.gain.setValueAtTime(1, ctx.currentTime);
-  const t0 = ctx.currentTime + 0.25;
+  // The music makes way: it fades as the crew draw breath, and the song begins under the fade.
+  const hadMusic = !!music;
+  if (music) { stopPiece(2.5); plan.halt(); }
+  const t0 = ctx.currentTime + (hadMusic ? 1.2 : 0.25);
   const s = { arr, t0, next: 0, timers: [], id, opts };
   song = s;
   // The sea drops back a little while the crew sing.
   if (seaBus) seaBus.gain.setTargetAtTime(vol.sea * 1.7 * 0.55, ctx.currentTime, 0.8);
   const pump = () => {
     if (song !== s) return;
-    const horizon = ctx.currentTime + 1.2 - t0;
-    while (s.next < arr.events.length && arr.events[s.next].t < horizon) { const e = arr.events[s.next++]; playEvent(r, e, Math.max(ctx.currentTime, t0 + e.t)); }
+    const horizon = ctx.currentTime + LOOKAHEAD - t0;
+    while (s.next < arr.events.length && arr.events[s.next].t < horizon) { const e = arr.events[s.next++]; const when = t0 + e.t; if (when < ctx.currentTime - LATE) continue; playEvent(r, e, Math.max(ctx.currentTime, when)); }
   };
   pump();
   s.pumpTimer = setInterval(pump, 250);
@@ -51522,6 +51642,7 @@ function playSong(id, opts = {}) {
 function finish(s) {
   clearInterval(s.pumpTimer); s.timers.forEach(clearTimeout);
   if (song === s) song = null;
+  if (ctx) plan.songUntil = ctx.currentTime;
   if (seaBus && ctx) seaBus.gain.setTargetAtTime(vol.sea * 1.7, ctx.currentTime, 1.2);
   s.opts.onLine?.(null, -1, 'end'); s.opts.onEnd?.();
 }
@@ -51559,13 +51680,19 @@ function resumeAudio() { ensure(); if (ctx && ctx.state === 'suspended') ctx.res
 function setMuted(m) { muted = m; applyVolumes(); }
 function isMuted() { return muted; }
 
-// ---------- music that follows the moment (FEEL-2, 2.13) ----------
-// The interface tells the player the mood every second or so (core/score.js musicMood). A piece
-// for that mood plays through, then a silence (the sea is the soundtrack between), then another.
-// A change of mood fades the piece out (fast into a fight) and the next mood's music follows. The
-// music gives way to the crew's shanties and comes back after.
-let music = null;            // { id, arr, t0, rig, mood, pump, ending }
-let musicMoodNow = null, lastPiece = null, nextMusicAt = 0, onPiece = null, auditioning = false, lastSongAt = -99;
+// ---------- music that follows the moment (FEEL-2, 2.13; smoothed in 3.5.5) ----------
+// The interface tells the player the mood every second (core/score.js musicMood). What to do about it
+// is core/musicplan.js's (tested in node): a mood must hold a while before it counts, a piece that suits
+// the new mood plays on, a quiet piece near its end is let finish, changes crossfade, and the crew's
+// songs come first. This part only plays what the plan says.
+//
+// Notes are handed to the audio clock LOOKAHEAD seconds ahead, so a busy moment in the game (a heavy
+// screen, a phone catching its breath) does not starve the music; a note whose moment has passed by
+// more than LATE is dropped, never played late in a heap.
+const LOOKAHEAD = 4, LATE = 0.2;
+let music = null;            // { id, arr, t0, rig, mood, pump }
+let musicMoodNow = null, onPiece = null, auditioning = false;
+const plan = new MusicPlan();
 function stopPiece(fade) {
   const m = music;
   if (!m || !ctx) return;
@@ -51573,62 +51700,54 @@ function stopPiece(fade) {
   clearInterval(m.pump);
   const g = m.rig.out.gain, now = ctx.currentTime;
   g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(0.0001, now + Math.max(0.05, fade));
-  setTimeout(() => { try { m.rig.out.disconnect(); } catch { /* gone */ } }, fade * 1000 + 3500);
+  setTimeout(() => { try { m.rig.out.disconnect(); } catch { /* gone */ } }, (fade + LOOKAHEAD) * 1000 + 1500);
 }
 function startPiece(id, mood, opts = {}) {
   if (!ensure() || !id) return null;
   const arr = arrangePiece(id, { mood, scoring: opts.scoring });
   const rig = makeRig(ctx, musicBus);
-  rig.out.gain.setValueAtTime(0.0001, ctx.currentTime); rig.out.gain.linearRampToValueAtTime(arr.gain, ctx.currentTime + 1.2);
+  const fadeIn = opts.fadeIn ?? 1.2;
+  rig.out.gain.setValueAtTime(0.0001, ctx.currentTime); rig.out.gain.linearRampToValueAtTime(arr.gain, ctx.currentTime + Math.max(0.05, fadeIn));
   const t0 = ctx.currentTime + 0.3;
   const m = { id, arr, t0, rig, mood, next: 0 };
-  m.pump = setInterval(() => {
+  const pump = () => {
     if (music !== m) return;
-    const horizon = ctx.currentTime + 1.5 - t0;
-    while (m.next < arr.events.length && arr.events[m.next].t < horizon) { const e = arr.events[m.next++]; playEvent(rig, e, Math.max(ctx.currentTime, t0 + e.t)); }
-    if (ctx.currentTime > t0 + arr.length) { // finished: a silence, then another
-      clearInterval(m.pump); music = null; lastPiece = id;
-      const [a, b] = GAPS[mood] || [20, 40];
-      nextMusicAt = ctx.currentTime + a + Math.random() * (b - a);
-      if (auditioning) { auditioning = false; }
+    const horizon = ctx.currentTime + LOOKAHEAD - t0;
+    while (m.next < arr.events.length && arr.events[m.next].t < horizon) { const e = arr.events[m.next++]; const when = t0 + e.t; if (when < ctx.currentTime - LATE) continue; playEvent(rig, e, Math.max(ctx.currentTime, when)); }
+    if (ctx.currentTime > t0 + arr.length) { // played through: a breath of sea, then another
+      clearInterval(m.pump); music = null;
+      if (auditioning) { auditioning = false; plan.halt(ctx.currentTime, 4); } else plan.ended(ctx.currentTime);
     }
-  }, 250);
+  };
   music = m;
+  pump();
+  m.pump = setInterval(pump, 250);
   onPiece?.({ id, title: arr.title, credit: arr.credit, by: arr.by, year: arr.year, mood });
   return arr;
 }
-// Called often by the interface with the mood of the moment (null for silence).
+// Called every second by the interface with the mood of the moment (null for silence).
 function setMusicMood(mood) {
-  if (!ensure() || ctx.state !== 'running') { musicMoodNow = mood; return; }
+  musicMoodNow = mood;
+  if (!ensure() || ctx.state !== 'running' || auditioning) return;
   const now = ctx.currentTime;
-  if (auditioning) return;
-  if (vol.music <= 0.001 || muted) { if (music) stopPiece(0.5); musicMoodNow = mood; return; }
-  if (song) { if (music) stopPiece(2); lastSongAt = now; musicMoodNow = mood; return; } // the crew are singing; the music waits a while after them
-  if (mood !== musicMoodNow) {
-    const prev = musicMoodNow;
-    musicMoodNow = mood;
-    if (music && music.mood !== mood) {
-      // Port, night and sailing pieces can share a mood: a piece that also suits the new mood plays on.
-      const fits = mood && (arrangeMoods(music.id) || []).includes(mood) && mood !== 'combat' && mood !== 'lament';
-      if (!fits) { stopPiece(FADES[mood] || FADES[prev] || 3); nextMusicAt = now + (mood === 'combat' || mood === 'lament' ? 0.6 : prev === 'combat' ? 12 + Math.random() * 10 : 3.5); }
-      else music.mood = mood;
-    } else if (!music) nextMusicAt = Math.min(nextMusicAt, now + (mood === 'combat' || mood === 'lament' ? 0.4 : 3));
+  for (const a of plan.tick(mood, now, { singing: !!song, silent: vol.music <= 0.001 || muted })) {
+    if (a.fade != null) stopPiece(a.fade);
+    if (a.start) { const arr = startPiece(a.start, a.mood, { fadeIn: a.fadeIn }); if (arr) plan.started(a.start, a.mood, arr.length + 0.3, now); }
   }
-  if (!music && mood && now >= nextMusicAt && (now - lastSongAt > 10 || mood === 'combat')) startPiece(pickPiece(mood, lastPiece), mood);
 }
-const arrangeMoods = (id) => _SC[id]?.moods;
 function onMusicPiece(fn) { onPiece = fn; }
-function musicState() { return { mood: musicMoodNow, playing: music ? music.id : null, title: music ? music.arr.title : null, by: music ? music.arr.by : null, year: music ? music.arr.year : null, auditioning, nextIn: ctx && !music ? Math.max(0, nextMusicAt - ctx.currentTime) : 0 }; }
+function musicState() { return { mood: musicMoodNow, settled: plan.settled, playing: music ? music.id : null, title: music ? music.arr.title : null, by: music ? music.arr.by : null, year: music ? music.arr.year : null, length: music ? music.arr.length : 0, auditioning, nextIn: ctx && !music ? Math.max(0, plan.nextAt - ctx.currentTime) : 0 }; }
 // The listening list in Settings: play one piece now (null stops it).
 function auditionPiece(id, mood) {
   if (!ensure()) return null;
   if (music) stopPiece(0.4);
-  if (!id) { auditioning = false; nextMusicAt = ctx.currentTime + 4; return null; }
+  plan.halt(ctx.currentTime, 4);
+  if (!id) { auditioning = false; return null; }
   auditioning = true;
   const arr = startPiece(id, mood || _SC[id].moods[0]);
   return arr ? { title: arr.title, length: arr.length } : null;
 }
-function stopMusic(fade = 1.5) { if (music) stopPiece(fade); auditioning = false; }
+function stopMusic(fade = 1.5) { if (music) stopPiece(fade); plan.halt(); auditioning = false; }
 // Render a piece offline (for the checks in tools/: peak level, silence, length).
 async function renderPiece(id, opts = {}) {
   const arr = arrangePiece(id, opts);
@@ -55980,7 +56099,13 @@ function applyAudioSettings() {
 // audio.js decides when a piece starts, ends or gives way.
 function musicNowText() { const m = musicState(); return m.playing ? `Now playing: ${m.title} (${m.by}, ${m.year}).` : m.mood ? `Waiting for the next piece (${MOODS[m.mood]?.toLowerCase() || m.mood}).` : ''; }
 onMusicPiece((p) => { if (settings.musicNames !== false && screen !== 'menu') toast(`♪ ${p.title} (${p.credit}, ${p.year})`, 'info'); noteCodex({ music: { [`p:${p.id}`]: true } }); });
-setInterval(() => { try { setMusicMood(screen === 'menu' && !game ? 'title' : game && document.visibilityState !== 'hidden' ? musicMood(game, screen) : null); } catch { /* never let the music stop the game */ } }, 1000);
+// 3.5.5 (the owner: "The music in the intro screen should stay until character creation is complete
+// and the game is entered"): the title's music plays on through the new captain's page, the opening and
+// its offers, until the voyage itself is on screen; there it hands over to the music of the moment
+// (a piece that suits both plays on).
+let introMusic = true;
+const musicMoodHere = () => document.visibilityState === 'hidden' ? null : (introMusic || !game) ? 'title' : musicMood(game, screen);
+setInterval(() => { try { setMusicMood(musicMoodHere()); } catch { /* never let the music stop the game */ } }, 1000);
 function settingsScreen(back) {
   settingsBack = back;
   const prev = screen;
@@ -56269,6 +56394,8 @@ let hintShowing = null, hintAt = -1e9, landingIsl = null, hintTimer = null;
 const HINT_SCREENS = new Set(['play', 'port', 'land', 'base']);
 function setScreen(s) {
   screen = s;
+  if (s === 'play' || s === 'port' || s === 'base') introMusic = false;
+  else if (s === 'menu' && !game) introMusic = true;
   if (hintShowing && !HINT_SCREENS.has(s)) hideHint();
   const playing = game && !game.practice && !game.state.shore && ['play', 'port', 'base', 'boarding', 'boarded', 'deck', 'duel', 'crew', 'choice', 'map', 'sheet', 'pause', 'popup', 'help', 'settings'].includes(s);
   $('#hud').classList.toggle('hidden', !playing);
@@ -59120,7 +59247,7 @@ function buildHud() {
         if (t === 'menu') pauseMenu();
         if (t === 'board') doBoard();
         if (t === 'chart') mapScreen();
-        if (t === 'sing') { if (songPlaying()) stopSong(1.5); else doSing(); }
+        if (t === 'sing') { if (songPlaying()) stopSong(2.5); else doSing(); }
         if (t === 'hasten') toggleHasten();
         if (t === 'more') togglePhoneSheet();
         if (t === 'safe') toggleSafeMode();
@@ -59188,7 +59315,7 @@ function buildPhoneSheet() {
     if (!game) return;
     if (id === 'stations') { cycleStations(); return; }
     if (id === 'safe') { toggleSafeMode(); return; }
-    if (id === 'sing') { if (songPlaying()) stopSong(1.5); else doSing(); return; }
+    if (id === 'sing') { if (songPlaying()) stopSong(2.5); else doSing(); return; }
     if (id === 'lights') { const r = smugglingMod.setLightsOut(game); toast(r.text, 'info'); return; }
     if (id === 'raid') { setScreen('play'); doRaid(); return; }
     if (id === 'autopilot') { if (screen !== 'play') resume(); toggleAutopilot(); return; }
@@ -62025,8 +62152,9 @@ function soundscape(dt) {
   // The ambience bed starts however the voyage began: a new campaign, a loaded save, or an heir.
   if (!audioStarted) { audioStarted = true; startSea(); }
   const st = game.state, p = game.player;
-  // A song at sea ends when the guns start or the ship comes in.
-  if (songPlaying() && screen !== 'songs' && (st.mode !== 'sea' || p?.combatTimer > 0)) stopSong(2.5);
+  // A song at sea ends when the guns start (3.5.5: no longer when she comes in: the crew finish their
+  // song as she makes fast; and the voices fade, they are not cut).
+  if (songPlaying() && screen !== 'songs' && ((st.mode === 'sea' && p?.combatTimer > 0) || st.mode === 'dead')) stopSong(3);
   if (!p) return;
   let nearLand = 0;
   for (const isl of game.world.islands) { const d = Math.hypot(isl.x - p.x, isl.y - p.y) - isl.radius; if (d < 1400) nearLand = Math.max(nearLand, 1 - Math.max(0, d) / 1400); }
@@ -62049,7 +62177,9 @@ function doSing(id = null) {
   if (!r.ok) { toast(r.err, 'warn'); return; }
   const sh = r.shanty;
   toast(`The crew strike up "${sh.name}".${r.fresh ? ' Spirits lift, and the hands work the sails in time.' : ' They sang it not long ago, and it shows.'}`, 'info');
-  playSong(r.id || pick, { form: 'short', voices: crewVoices(), onLine: showLyric }); noteCodex({ music: { [`s:${r.id || pick}`]: true } });
+  // (3.5.5: the whole song, every verse, as the crew would sing it: the owner asked for songs at full
+  // length. Called for, it is struck up at once, without the band's opening.)
+  playSong(r.id || pick, { form: 'called', voices: crewVoices(), onLine: showLyric }); noteCodex({ music: { [`s:${r.id || pick}`]: true } });
 }
 
 // Browsers keep audio suspended until the player touches something; wake it on any gesture.
@@ -62141,7 +62271,7 @@ window.__brine = {
   setSail(v) { sailLevel = v; },
   openSettings() { settingsScreen(() => resume()); },
   // FEEL-2 (2.13): the music, for the browser checks.
-  music: { list: () => SCORE_IDS.map((id) => ({ id, scorings: SCORES[id].scorings.length, moods: SCORES[id].moods })), leadOnly: async (id, opts = {}) => { const r = await renderPiece(id, { ...opts, only: 'lead' }); return { sr: r.buf.sampleRate, d: r.buf.getChannelData(0).slice(0, Math.floor(r.buf.sampleRate * (opts.seconds || 5))), notes: r.leadNotes }; }, state: () => musicState(), mood: () => (game ? musicMood(game, screen) : 'title'), audition: (id) => auditionPiece(id), stats: async (id, opts = {}) => { const r = await renderPiece(id, opts); const d = [r.buf.getChannelData(0), r.buf.getChannelData(1)]; let peak = 0, sum = 0, n = 0, quiet = 0, run = 0; for (let i = 0; i < d[0].length; i++) { const x = Math.max(Math.abs(d[0][i]), Math.abs(d[1][i])); peak = Math.max(peak, x); sum += x * x; n++; if (x < 0.002) { run++; if (run > 22050 * 2) quiet++; } else run = 0; } return { peak, rms: Math.sqrt(sum / n), seconds: d[0].length / r.buf.sampleRate, longSilence: quiet > 0, length: r.length }; } },
+  music: { list: () => SCORE_IDS.map((id) => ({ id, scorings: SCORES[id].scorings.length, moods: SCORES[id].moods })), leadOnly: async (id, opts = {}) => { const r = await renderPiece(id, { ...opts, only: 'lead' }); return { sr: r.buf.sampleRate, d: r.buf.getChannelData(0).slice(0, Math.floor(r.buf.sampleRate * (opts.seconds || 5))), notes: r.leadNotes }; }, state: () => musicState(), mood: () => musicMoodHere(), playing: () => musicState(), audition: (id) => auditionPiece(id), stats: async (id, opts = {}) => { const r = await renderPiece(id, opts); const d = [r.buf.getChannelData(0), r.buf.getChannelData(1)]; let peak = 0, sum = 0, n = 0, quiet = 0, run = 0; for (let i = 0; i < d[0].length; i++) { const x = Math.max(Math.abs(d[0][i]), Math.abs(d[1][i])); peak = Math.max(peak, x); sum += x * x; n++; if (x < 0.002) { run++; if (run > 22050 * 2) quiet++; } else run = 0; } return { peak, rms: Math.sqrt(sum / n), seconds: d[0].length / r.buf.sampleRate, longSilence: quiet > 0, length: r.length }; } },
   debug: {
     slots: (ship) => fittings.slotsOf(ship).length,
     autoBill: () => crew.autoStations(game, game.player.id),

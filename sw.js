@@ -1,6 +1,6 @@
-// Brine & Blackpowder 3.5.4: keeps the game on the phone, so it plays offline. A new version of
+// Brine & Blackpowder 3.5.5: keeps the game on the phone, so it plays offline. A new version of
 // this file (each release) fetches the new game in the background; it plays from the next opening.
-const CACHE = 'brine-3.5.4';
+const CACHE = 'brine-3.5.5';
 const FILES = ['index.html', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
